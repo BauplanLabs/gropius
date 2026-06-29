@@ -43,6 +43,15 @@ struct CreateChair {
     year: u32,
 }
 
+#[derive(JsonSchema)]
+struct Cursed;
+
+impl Serialize for Cursed {
+    fn serialize<S: serde::Serializer>(&self, _serializer: S) -> Result<S::Ok, S::Error> {
+        Err(serde::ser::Error::custom("cursed chair"))
+    }
+}
+
 #[gropius::api]
 trait ChairApi {
     #[endpoint(GET, "/v1/chairs/{year}/{id}")]
@@ -53,12 +62,19 @@ trait ChairApi {
         &self,
         body: gropius::Body<CreateChair>,
     ) -> Result<ChairResponse, ChairError>;
+
+    #[endpoint(GET, "/v1/cursed")]
+    async fn cursed(&self) -> Result<Cursed, ChairError>;
 }
 
 #[derive(Clone)]
 struct Server;
 
 impl ChairApi for Server {
+    async fn cursed(&self) -> Result<Cursed, ChairError> {
+        Ok(Cursed)
+    }
+
     async fn create_chair(
         &self,
         body: gropius::Body<CreateChair>,
@@ -230,6 +246,20 @@ async fn api_impl() -> anyhow::Result<()> {
                 msg: "method not allowed".into(),
             }
         );
+    }
+
+    // A response that fails to serialize is reported as an internal error.
+    {
+        let req = http::Request::builder()
+            .method(http::Method::GET)
+            .uri("/v1/cursed")
+            .body(bytes::Bytes::new())?;
+
+        let resp = router.dispatch(req).await;
+        assert_eq!(resp.status(), 500);
+
+        let body: ErrorBody = serde_json::from_slice(resp.body())?;
+        assert_eq!(body.error, "INTERNAL_ERROR");
     }
 
     // Invalid JSON body.

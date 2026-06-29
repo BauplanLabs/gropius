@@ -223,7 +223,7 @@ pub(crate) fn expand(attr: TokenStream, mut item_trait: ItemTrait) -> TokenStrea
 
         let ok_branch = match &ep.response_kind {
             ResponseKind::Json(_) => quote_spanned! { span =>
-                Ok(::gropius::generated::make_json_response(&v, ::http::StatusCode::OK))
+                ::gropius::generated::make_json_response(&v, ::http::StatusCode::OK)
             },
             ResponseKind::Empty => quote! {
                 Ok(::http::Response::builder()
@@ -237,7 +237,7 @@ pub(crate) fn expand(attr: TokenStream, mut item_trait: ItemTrait) -> TokenStrea
         quote_spanned! { span =>
             ::std::sync::Arc::new({
                 let this = self.clone();
-                move |_req, _path_params| -> _ {
+                move |_req, _path_params| {
                     #(#extractions)*
 
                     let this = this.clone();
@@ -246,7 +246,7 @@ pub(crate) fn expand(attr: TokenStream, mut item_trait: ItemTrait) -> TokenStrea
                             Ok(v) => { let _ = v; #ok_branch },
                             Err(e) => {
                                 let status = ::gropius::ApiError::status_code(&e);
-                                Ok(::gropius::generated::make_json_response(&e, status))
+                                ::gropius::generated::make_json_response(&e, status)
                             }
                         }
                     })

@@ -6,6 +6,8 @@ use bytes::{BufMut, Bytes, BytesMut};
 use schemars::{Schema, SchemaGenerator};
 use serde::Serialize;
 
+use crate::RouterError;
+
 type BoxFuture<T> = Pin<Box<dyn Future<Output = T> + Send>>;
 
 /// A type-erased handler closure. Takes the request and matched path
@@ -15,7 +17,7 @@ pub type Handler = Arc<
     dyn Fn(
             &http::Request<Bytes>,
             &matchit::Params<'_, '_>,
-        ) -> BoxFuture<Result<http::Response<Bytes>, crate::RouterError>>
+        ) -> BoxFuture<Result<http::Response<Bytes>, RouterError>>
         + Send
         + Sync,
 >;
@@ -101,7 +103,7 @@ pub struct Endpoint {
 pub fn make_json_response<Body: Serialize>(
     body: &Body,
     status: impl Into<http::StatusCode>,
-) -> http::Response<Bytes> {
+) -> Result<http::Response<Bytes>, RouterError> {
     let mut buf = BytesMut::new().writer();
 
     let res = if cfg!(debug_assertions) {
@@ -112,12 +114,14 @@ pub fn make_json_response<Body: Serialize>(
 
     let bytes = match res {
         Ok(_) => buf.into_inner().freeze(),
-        Err(_e) => todo!(),
+        Err(e) => return Err(RouterError::ResponseSerialization(e)),
     };
 
-    http::Response::builder()
+    let resp = http::Response::builder()
         .status(status.into())
         .header("content-type", "application/json")
         .body(bytes)
-        .unwrap()
+        .unwrap();
+
+    Ok(resp)
 }

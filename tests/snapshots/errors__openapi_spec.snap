@@ -68,6 +68,22 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ChairError"
+  /v1/cursed:
+    get:
+      operationId: cursed
+      responses:
+        "200":
+          description: successful operation
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Cursed"
+        default:
+          description: error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ChairError"
 components:
   schemas:
     ChairError:
@@ -106,3 +122,6 @@ components:
       required:
         - model
         - year
+    Cursed:
+      enum:
+        - ~
