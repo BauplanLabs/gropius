@@ -28,9 +28,10 @@ impl syn::parse::Parse for ApiAttr {
             let _eq: syn::Token![=] = input.parse()?;
             let content;
             syn::bracketed!(content in input);
-            let items = syn::punctuated::Punctuated::<syn::LitStr, syn::Token![,]>::parse_terminated(
-                &content,
-            )?;
+            let items =
+                syn::punctuated::Punctuated::<syn::LitStr, syn::Token![,]>::parse_terminated(
+                    &content,
+                )?;
             tags.extend(items);
 
             let _ = input.parse::<syn::Token![,]>();

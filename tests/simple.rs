@@ -1,12 +1,6 @@
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
-// todo
-// merge multiple traits
-// raw response type (http::Response)
-// empty response
-// tuples for path
-
 #[derive(Default, Clone, Serialize, Deserialize, JsonSchema)]
 struct GetFooError {
     msg: String,

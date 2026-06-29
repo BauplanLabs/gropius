@@ -1,7 +1,7 @@
 //! # Gropius
 //!
-//! Gropius is a rust library for defining OpenAPI-compatible APIs in Rust
-//! traits. While OpenAPI "best practices" recommend that you write your API
+//! Gropius is a rust library for defining OpenAPI-compatible APIs in Rust.
+//! While OpenAPI "best practices" recommend that you write your API
 //! definitions as YAML and then generate server and client code, this is the
 //! reverse: define a rust trait, and you can generate the specification from it.
 //!
