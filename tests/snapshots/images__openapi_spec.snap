@@ -1,6 +1,5 @@
 ---
 source: tests/images.rs
-assertion_line: 54
 expression: spec
 ---
 openapi: 3.1.0
@@ -16,6 +15,17 @@ paths:
           description: successful operation
           content:
             image/png: {}
+        default:
+          description: error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+    post:
+      operationId: upload_image
+      responses:
+        "200":
+          description: successful operation
         default:
           description: error
           content:
