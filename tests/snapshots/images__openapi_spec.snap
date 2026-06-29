@@ -1,0 +1,33 @@
+---
+source: tests/images.rs
+assertion_line: 54
+expression: spec
+---
+openapi: 3.1.0
+info:
+  title: ImageApi
+  version: 0.1.0
+paths:
+  /image:
+    get:
+      operationId: get_image
+      responses:
+        "200":
+          description: successful operation
+          content:
+            image/png: {}
+        default:
+          description: error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+components:
+  schemas:
+    ApiError:
+      properties:
+        message:
+          type: string
+      type: object
+      required:
+        - message

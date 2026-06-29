@@ -1,0 +1,98 @@
+---
+source: tests/multi.rs
+assertion_line: 155
+expression: spec
+---
+openapi: 3.1.0
+info:
+  title: WidgetService
+  version: 1.0.0
+paths:
+  /healthz:
+    get:
+      tags:
+        - health
+      description: Check service health.
+      operationId: healthz
+      responses:
+        "200":
+          description: successful operation
+        default:
+          description: error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+  /v1/widgets:
+    get:
+      tags:
+        - widgets
+      description: List all widgets.
+      operationId: list_widgets
+      responses:
+        "200":
+          description: successful operation
+          content:
+            application/json:
+              schema:
+                items:
+                  $ref: "#/components/schemas/Widget"
+                type: array
+        default:
+          description: error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+  "/v1/widgets/{id}":
+    get:
+      tags:
+        - widgets
+      description: Get a widget by ID.
+      operationId: get_widget
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+            minimum: 0
+            format: uint64
+      responses:
+        "200":
+          description: successful operation
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Widget"
+        default:
+          description: error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+components:
+  schemas:
+    ApiError:
+      properties:
+        message:
+          type: string
+      type: object
+      required:
+        - message
+    Widget:
+      properties:
+        id:
+          type: integer
+          minimum: 0
+          format: uint64
+        name:
+          type: string
+      type: object
+      required:
+        - id
+        - name
+tags:
+  - name: health
+  - name: widgets
+    description: Widget management.

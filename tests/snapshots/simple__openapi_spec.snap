@@ -1,0 +1,52 @@
+---
+source: tests/simple.rs
+expression: spec
+---
+openapi: 3.1.0
+info:
+  title: FooApi
+  version: 0.1.0
+paths:
+  /v1/foo:
+    get:
+      operationId: get_foo
+      parameters:
+        - name: pretty_please
+          in: query
+          required: true
+          schema:
+            type: boolean
+      responses:
+        "200":
+          description: successful operation
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/FooResponse"
+        default:
+          description: error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/GetFooError"
+components:
+  schemas:
+    GetFooError:
+      properties:
+        msg:
+          type: string
+      type: object
+      required:
+        - msg
+    FooResponse:
+      properties:
+        bar:
+          type: integer
+          minimum: 0
+          format: uint
+        baz:
+          type: string
+      type: object
+      required:
+        - bar
+        - baz

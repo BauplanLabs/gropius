@@ -1,0 +1,108 @@
+---
+source: tests/errors.rs
+expression: spec
+---
+openapi: 3.1.0
+info:
+  title: ChairApi
+  version: 0.1.0
+paths:
+  "/v1/chairs/{year}/{id}":
+    get:
+      operationId: get_chair
+      parameters:
+        - name: year
+          in: path
+          required: true
+          schema:
+            type: integer
+            minimum: 0
+            format: uint32
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: successful operation
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ChairResponse"
+        default:
+          description: error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ChairError"
+  /v1/chairs:
+    post:
+      operationId: create_chair
+      requestBody:
+        content:
+          application/json:
+            schema:
+              properties:
+                model:
+                  type: string
+                year:
+                  type: integer
+                  minimum: 0
+                  format: uint32
+              type: object
+              required:
+                - model
+                - year
+        required: true
+      responses:
+        "200":
+          description: successful operation
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ChairResponse"
+        default:
+          description: error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ChairError"
+components:
+  schemas:
+    ChairError:
+      oneOf:
+        - properties:
+            error:
+              type: string
+              enum:
+                - WRONG_YEAR
+            msg:
+              type: string
+          type: object
+          required:
+            - error
+            - msg
+        - properties:
+            error:
+              type: string
+              enum:
+                - CHAIR_NOT_FOUND
+            msg:
+              type: string
+          type: object
+          required:
+            - error
+            - msg
+    ChairResponse:
+      properties:
+        model:
+          type: string
+        year:
+          type: integer
+          minimum: 0
+          format: uint32
+      type: object
+      required:
+        - model
+        - year
