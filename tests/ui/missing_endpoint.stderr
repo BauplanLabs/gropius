@@ -1,0 +1,5 @@
+error: expected #[endpoint(...)] attribute on method
+  --> tests/ui/missing_endpoint.rs:15:11
+   |
+15 |     async fn missing_endpoint(&self) -> Result<(), MyError>;
+   |           ^^

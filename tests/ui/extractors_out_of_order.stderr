@@ -1,0 +1,5 @@
+error: arguments must be in order: Path, Query, Body, Request
+  --> tests/ui/extractors_out_of_order.rs:25:15
+   |
+25 |         path: gropius::Path<WidgetId>,
+   |               ^^^^^^^

@@ -32,7 +32,7 @@ For more details, head to the [docs](https://docs.rs/gropius).
 
 The crate is new and is currently **alpha quality**. However, it has several distinguishing features compared to similar libraries:
 
- - Integrates with with `tower::Service` and hyper
+ - Integrates with `tower::Service` and hyper
  - Supports grouping endpoints into multiple traits, which can then be combined in a single API surface
  - Supports OpenAPI 3.1.x, with 3.2.x support planned
 

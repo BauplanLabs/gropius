@@ -10,5 +10,6 @@ test: lint
     cargo test
 
 [env("INSTA_UPDATE", "always")]
+[env("TRYBUILD", "overwrite")]
 update-snapshots:
     cargo test

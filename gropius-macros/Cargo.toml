@@ -8,6 +8,7 @@ proc-macro = true
 
 [dependencies]
 heck = "0.5"
+matchit.workspace = true
 proc-macro2 = "1"
 quote = "1"
 proc-macro2-diagnostics = "0.10"

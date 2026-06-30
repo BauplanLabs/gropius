@@ -131,6 +131,8 @@ pub(crate) fn expand(attr: TokenStream, mut item_trait: ItemTrait) -> TokenStrea
         }
     }
 
+    path::validate(&endpoints, &mut errors);
+
     let desc_tokens = endpoints.iter().map(|ep| {
         let name_str = ep.name.to_string();
         let method = &ep.method;
