@@ -21,9 +21,11 @@
 //! # use serde::{Deserialize, Serialize};
 //! # use schemars::JsonSchema;
 //! #
+//! /// A widget ID.
 //! #[derive(Serialize, Deserialize, JsonSchema)]
 //! struct Id(u64);
 //!
+//! /// A widget that fidgets.
 //! #[derive(Serialize, Deserialize, JsonSchema)]
 //! struct Widget {
 //!     name: String
@@ -43,6 +45,7 @@
 //!
 //! #[gropius::api]
 //! trait WidgetApi {
+//!     /// Get a widget by ID.
 //!     #[endpoint(GET, "/v1/widgets/{id}")]
 //!     async fn get_widget(&self, path: Path<Id>) -> Result<Widget, Error>;
 //! }
@@ -68,20 +71,23 @@
 //! #     fn status_code(&self) -> http::StatusCode { http::StatusCode::INTERNAL_SERVER_ERROR }
 //! # }
 //! #
+//! /// Query parameters for `update_widget`.
 //! #[derive(Deserialize, JsonSchema)]
 //! struct WidgetQuery {
 //!     #[serde(alias = "dryrun")]
 //!     dry_run: bool,
 //! }
 //!
+//! /// An update to a widget.
 //! #[derive(Serialize, Deserialize, JsonSchema)]
 //! struct WidgetUpdate {
 //!     name: String,
-//!     bucket: u32,
+//!     fidgets: bool,
 //! }
 //!
 //! #[gropius::api]
 //! trait WidgetApi {
+//!     /// Update a widget by ID.
 //!     #[endpoint(PUT, "/v1/widgets/{id}")]
 //!     async fn update_widget(
 //!         &self,
@@ -132,7 +138,7 @@
 //! }
 //! ```
 //!
-//! ### Tags
+//! ### Tags and documentation
 //!
 //! Each `gropius::api` accepts any number of operation tags, which will be
 //! applied to all endpoints in the trait:
@@ -146,6 +152,9 @@
 //!
 //! To have different tags on different endpoints, use multiple traits (see
 //! below).
+//!
+//! Docstrings on traits, request and response types, and endpoints are all
+//! carried over to the OpenAPI spec.
 //!
 //! ## Implementing the trait
 //!
@@ -247,7 +256,8 @@
 //! let srv = Server;
 //! let service = Router::builder()
 //!     // .with_endpoints_at adds a prefix to all the endpoints
-//!     .with_endpoints_at("/v1", srv.endpoints())
+//!     .with_endpoints_at("/v1", WidgetApi::endpoints(&srv))
+//!     // You can also add more endpoints here.
 //!     .build()
 //!     .unwrap();
 //!
