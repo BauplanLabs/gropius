@@ -15,14 +15,14 @@ struct Chair {
 
 #[gropius::api(tags = ["chairs"])]
 /// Explore chairs designed by Walter Gropius.
-trait ChairAPI {
+trait ChairApi {
     /// List chairs by year.
     #[endpoint(GET, "/chairs/{year}")]
-    async fn list_widgets(&self, path: gropius::Path<u16>) -> Result<Vec<Chair>, ApiError>;
+    async fn list_chairs(&self, path: gropius::Path<u16>) -> Result<Vec<Chair>, ApiError>;
 
     /// Get a chair by ID.
-    #[endpoint(GET, "/widgets/{year}/{id}")]
-    async fn get_widget(&self, path: gropius::Path<(u64, String)>) -> Result<Widget, ApiError>;
+    #[endpoint(GET, "/chairs/{year}/{id}")]
+    async fn get_chair(&self, path: gropius::Path<(u64, String)>) -> Result<Widget, ApiError>;
 }
 ```
 
