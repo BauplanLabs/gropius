@@ -350,7 +350,13 @@ pub(crate) fn expand(attr: TokenStream, mut item_trait: ItemTrait) -> TokenStrea
 
 /// Parses an endpoint method. Removes the `#[endpoint(...)] annotation.
 fn parse_endpoint(method: &mut TraitItemFn) -> Result<RawEndpoint, Diagnostic> {
+    // These spans need to point to the method before it's desugared.
     let span = method.sig.ident.span();
+    let return_type_span = match &method.sig.output {
+        ReturnType::Type(_, ty) => ty.span(),
+        ReturnType::Default => method.sig.ident.span(),
+    };
+
     desugar_async(&mut method.sig);
 
     let attr = method
@@ -427,11 +433,6 @@ fn parse_endpoint(method: &mut TraitItemFn) -> Result<RawEndpoint, Diagnostic> {
     }
 
     let Some((response_type, error_type)) = parse_result_type(&method.sig.output) else {
-        let return_type_span = match &method.sig.output {
-            ReturnType::Type(_, ty) => ty.span(),
-            ReturnType::Default => method.sig.ident.span(),
-        };
-
         return Err(return_type_span.error("expected return type Result<R, E>"));
     };
 
