@@ -81,6 +81,8 @@ pub struct Endpoint {
     pub method: &'static http::Method,
     /// Path template, e.g. `/v1/shapes/{id}`.
     pub path: &'static str,
+    /// The path template's parameter names, in order (e.g. `["id"]`).
+    pub path_params: &'static [&'static str],
     /// The method's name.
     pub name: &'static str,
     /// The doc comment on the method.

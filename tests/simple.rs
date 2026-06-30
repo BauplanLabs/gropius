@@ -20,6 +20,7 @@ struct FooResponse {
 
 #[derive(Default, Clone, Serialize, Deserialize, JsonSchema)]
 struct GetFooQuery {
+    /// Whether to pretty-print the response.
     pretty_please: bool,
 }
 

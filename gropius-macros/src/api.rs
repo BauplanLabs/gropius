@@ -10,6 +10,8 @@ use syn::{
     Type, TypeParamBound,
 };
 
+mod path;
+
 /// Arguments to `#[gropius::api(tags = "...")]`.
 struct ApiAttr {
     tags: Vec<syn::LitStr>,
@@ -133,6 +135,8 @@ pub(crate) fn expand(attr: TokenStream, mut item_trait: ItemTrait) -> TokenStrea
         let name_str = ep.name.to_string();
         let method = &ep.method;
         let path = &ep.path;
+        let path_str = ep.path.value();
+        let path_param_names = path::parameter_names(&path_str);
         let doc_expr = quote_option(ep.doc.as_ref());
         let raw_request = ep.raw_request;
         let span = ep.span;
@@ -162,6 +166,7 @@ pub(crate) fn expand(attr: TokenStream, mut item_trait: ItemTrait) -> TokenStrea
             ::gropius::generated::Endpoint {
                 method: &::http::Method::#method,
                 path: #path,
+                path_params: &[#(#path_param_names),*],
                 name: #name_str,
                 doc: #doc_expr,
                 raw_request: #raw_request,

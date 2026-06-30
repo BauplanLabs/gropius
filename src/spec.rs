@@ -1,7 +1,7 @@
 use oas3::Map;
 use oas3::spec::{
-    Components, Info, MediaType, ObjectOrReference, Operation, Parameter, ParameterIn, PathItem,
-    RequestBody, Response, Schema, Spec, Tag,
+    Components, Info, MediaType, ObjectOrReference, ObjectSchema, Operation, Parameter,
+    ParameterIn, PathItem, RequestBody, Response, Schema, Spec, Tag,
 };
 use schemars::SchemaGenerator;
 
@@ -14,7 +14,7 @@ pub enum SpecError {
     #[error("the json schema for `{0}` is not a valid OpenAPI schema: {1}")]
     Schema(String, serde_json::Error),
     /// An error was encountered while serializing the spec to JSON.
-    #[error("failed to serialize spec: {0}")]
+    #[error("invalid spec: {0}")]
     Json(#[from] serde_json::Error),
     /// An error was encountered while serializing the spec to YAML.
     #[error("failed to serialize spec as YAML: {0}")]
@@ -22,6 +22,9 @@ pub enum SpecError {
     /// The HTTP method is unsupported by OpenAPI.
     #[error("unsupported HTTP method: {0}")]
     UnsupportedMethod(http::Method),
+    /// A path or query parameter could not be derived from its type's schema.
+    #[error("invalid parameter schema: {0}")]
+    Parameter(String),
 }
 
 /// A collated OpenAPI 3.1.x specification.
@@ -75,13 +78,11 @@ impl Specification {
                 let mut path = prefix.to_string();
                 path.push_str(ep.path);
 
-                let item = if !paths.contains_key(&path) {
+                if !paths.contains_key(&path) {
                     paths.insert(path.clone(), PathItem::default());
-                    paths.get_mut(&path).unwrap()
-                } else {
-                    paths.get_mut(&path).unwrap()
-                };
+                }
 
+                let item = paths.get_mut(&path).unwrap();
                 let slot = match *ep.method {
                     http::Method::GET => &mut item.get,
                     http::Method::PUT => &mut item.put,
@@ -164,27 +165,22 @@ fn build_operation(
     let mut parameters = Vec::new();
 
     if let Some(schema_fn) = ep.query_type {
-        parameters.extend(params_from_schema(
-            schema_fn,
-            ParameterIn::Query,
-            generator,
-        )?);
+        parameters.extend(query_params(schema_fn, generator)?);
     }
 
     if let Some(schema_fn) = ep.path_type {
-        parameters.extend(params_from_schema(schema_fn, ParameterIn::Path, generator)?);
+        parameters.extend(path_params(ep.path_params, schema_fn, generator)?);
     }
 
-    let request_body = match ep.request_type {
-        Some(schema_fn) => {
-            let schema = resolve_schema(schema_fn, generator)?;
-            Some(ObjectOrReference::Object(RequestBody {
-                content: json_content(schema),
-                required: Some(true),
-                ..Default::default()
-            }))
-        }
-        None => None,
+    let request_body = if let Some(schema_fn) = ep.request_type {
+        let schema = resolve_schema(schema_fn, generator)?;
+        Some(ObjectOrReference::Object(RequestBody {
+            content: make_json_content(schema),
+            required: Some(true),
+            ..Default::default()
+        }))
+    } else {
+        None
     };
 
     let error_schema = resolve_schema(ep.error_type, generator)?;
@@ -196,7 +192,7 @@ fn build_operation(
             let schema = resolve_schema(schema_fn, generator)?;
             Response {
                 description: Some("successful operation".to_string()),
-                content: json_content(schema),
+                content: make_json_content(schema),
                 ..Default::default()
             }
         }
@@ -226,7 +222,7 @@ fn build_operation(
         "default".to_string(),
         ObjectOrReference::Object(Response {
             description: Some("error".to_string()),
-            content: json_content(error_schema),
+            content: make_json_content(error_schema),
             ..Default::default()
         }),
     );
@@ -242,84 +238,151 @@ fn build_operation(
     })
 }
 
+fn query_params(
+    schema_fn: generated::SchemaFn,
+    generator: &mut SchemaGenerator,
+) -> Result<Vec<ObjectOrReference<Parameter>>, SpecError> {
+    let obj = resolve_inline(schema_fn, generator)?;
+    let required = obj.required;
+
+    Ok(obj
+        .properties
+        .into_iter()
+        .map(|(name, schema)| {
+            let is_required = required.contains(&name);
+            make_param(name, ParameterIn::Query, is_required, schema)
+        })
+        .collect())
+}
+
+fn path_params(
+    names: &[&str],
+    schema_fn: generated::SchemaFn,
+    generator: &mut SchemaGenerator,
+) -> Result<Vec<ObjectOrReference<Parameter>>, SpecError> {
+    // matchit supports {*rest} tail matchers, but it's not supported in OpenAPI.
+    if let Some(name) = names.iter().find(|name| name.starts_with('*')) {
+        return Err(SpecError::Parameter(format!(
+            "catch-all path parameter `{name}` cannot be represented in OpenAPI"
+        )));
+    }
+
+    let obj = resolve_inline(schema_fn, generator)?;
+
+    let schemas: Vec<Schema> = if !obj.properties.is_empty() {
+        // A struct.
+        names
+            .iter()
+            .map(|name| {
+                obj.properties.get(*name).cloned().ok_or_else(|| {
+                    SpecError::Parameter(format!("path parameter `{name}` has no matching field"))
+                })
+            })
+            .collect::<Result<_, _>>()?
+    } else if !obj.prefix_items.is_empty() {
+        // A tuple.
+        if obj.prefix_items.len() != names.len() {
+            return Err(SpecError::Parameter(format!(
+                "path has {} parameter(s) but the type has {}",
+                names.len(),
+                obj.prefix_items.len(),
+            )));
+        }
+
+        obj.prefix_items.clone()
+    } else if names.len() == 1 {
+        // A single value.
+        vec![Schema::Object(Box::new(ObjectOrReference::Object(obj)))]
+    } else {
+        return Err(SpecError::Parameter(format!(
+            "path has {} parameters but the type is neither a struct nor a tuple",
+            names.len(),
+        )));
+    };
+
+    Ok(names
+        .iter()
+        .zip(schemas)
+        .map(|(name, schema)| make_param((*name).to_owned(), ParameterIn::Path, true, schema))
+        .collect())
+}
+
 /// Generate a schema, producing a `$ref` for named types.
 fn resolve_schema(
     schema_fn: generated::SchemaFn,
     generator: &mut SchemaGenerator,
 ) -> Result<Schema, SpecError> {
-    Ok(to_oas3_schema(schema_fn(generator))?)
+    let json_schema = schema_fn(generator);
+    let oas3_schema = serde_json::from_value(json_schema.into())?;
+    Ok(oas3_schema)
 }
 
-/// Pull apart an object schema's properties into individual OpenAPI
-/// parameters.
-fn params_from_schema(
-    schema_fn: generated::SchemaFn,
-    location: ParameterIn,
-    generator: &mut SchemaGenerator,
-) -> Result<Vec<ObjectOrReference<Parameter>>, SpecError> {
-    let schema = resolve_inline(schema_fn, generator)?;
-
-    let Schema::Object(boxed) = schema else {
-        return Ok(Vec::new());
-    };
-    let ObjectOrReference::Object(obj) = *boxed else {
-        return Ok(Vec::new());
-    };
-
-    let is_path = location == ParameterIn::Path;
-
-    Ok(obj
-        .properties
-        .into_iter()
-        .map(|(name, prop_schema)| {
-            ObjectOrReference::Object(Parameter {
-                name: name.clone(),
-                location,
-                description: None,
-                required: Some(is_path || obj.required.contains(&name)),
-                deprecated: None,
-                allow_empty_value: None,
-                style: None,
-                explode: None,
-                allow_reserved: None,
-                schema: Some(prop_schema),
-                example: None,
-                examples: Map::new(),
-                content: None,
-                extensions: Map::new(),
-            })
-        })
-        .collect())
-}
-
-/// Resolve a schema function to an inline oas3 Schema, following `$ref`s
-/// into the generator's definitions.
+/// Resolve a schema function to its inline object schema, following
+/// `$ref`s.
 fn resolve_inline(
     schema_fn: generated::SchemaFn,
     generator: &mut SchemaGenerator,
-) -> Result<Schema, SpecError> {
-    let schema = to_oas3_schema(schema_fn(generator))?;
+) -> Result<ObjectSchema, SpecError> {
+    let mut schema = resolve_schema(schema_fn, generator)?;
 
-    // If the generator produced a $ref, look up the actual definition.
     if let Schema::Object(boxed) = &schema
         && let ObjectOrReference::Ref { ref_path, .. } = boxed.as_ref()
     {
         let name = ref_path.rsplit('/').next().unwrap_or(ref_path);
-        if let Some(def) = generator.definitions().get(name) {
-            return Ok(to_oas3_schema(schemars::Schema::from(
-                def.as_object().cloned().unwrap_or_default(),
-            ))?);
-        }
+        let def = generator.definitions().get(name).ok_or_else(|| {
+            SpecError::Parameter(format!("unresolved schema reference `{ref_path}`"))
+        })?;
+
+        let name = name.to_owned();
+        schema = serde_json::from_value(def.clone()).map_err(|e| SpecError::Schema(name, e))?;
     }
 
-    Ok(schema)
+    match schema {
+        Schema::Object(boxed) => match *boxed {
+            ObjectOrReference::Object(obj) => Ok(obj),
+            ObjectOrReference::Ref { ref_path, .. } => Err(SpecError::Parameter(format!(
+                "unresolved schema reference `{ref_path}`"
+            ))),
+        },
+        _ => Err(SpecError::Parameter("expected an object schema".to_owned())),
+    }
 }
 
-fn to_oas3_schema(schema: schemars::Schema) -> Result<Schema, serde_json::Error> {
-    serde_json::from_value(serde_json::Value::from(schema))
+fn make_param(
+    name: String,
+    location: ParameterIn,
+    required: bool,
+    mut schema: Schema,
+) -> ObjectOrReference<Parameter> {
+    // A docstring on a query/path param should go on the parameter, not on the
+    // referenced schema.
+    let description = match &mut schema {
+        Schema::Object(boxed) => match boxed.as_mut() {
+            ObjectOrReference::Object(obj) => obj.description.take(),
+            ObjectOrReference::Ref { .. } => None,
+        },
+        Schema::Boolean(_) => None,
+    };
+
+    ObjectOrReference::Object(Parameter {
+        name,
+        location,
+        description,
+        required: Some(required),
+        deprecated: None,
+        allow_empty_value: None,
+        style: None,
+        explode: None,
+        allow_reserved: None,
+        schema: Some(schema),
+        example: None,
+        examples: Map::new(),
+        content: None,
+        extensions: Map::new(),
+    })
 }
 
-fn json_content(schema: Schema) -> Map<String, MediaType> {
+fn make_json_content(schema: Schema) -> Map<String, MediaType> {
     let mut content = Map::new();
     content.insert(
         "application/json".to_string(),

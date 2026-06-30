@@ -13,6 +13,7 @@ paths:
       parameters:
         - name: pretty_please
           in: query
+          description: Whether to pretty-print the response.
           required: true
           schema:
             type: boolean

@@ -30,8 +30,8 @@ struct WidgetPath {
     id: u64,
 }
 
-#[gropius::api(tags = ["widgets"])]
 /// Widget management.
+#[gropius::api(tags = ["widgets"])]
 trait WidgetApi {
     /// List all widgets.
     #[endpoint(GET, "/widgets")]

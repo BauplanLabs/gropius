@@ -32,12 +32,6 @@ struct ChairResponse {
 }
 
 #[derive(Deserialize, JsonSchema)]
-struct ChairPath {
-    year: u32,
-    id: String,
-}
-
-#[derive(Deserialize, JsonSchema)]
 struct CreateChair {
     model: String,
     year: u32,
@@ -55,7 +49,10 @@ impl Serialize for Cursed {
 #[gropius::api]
 trait ChairApi {
     #[endpoint(GET, "/v1/chairs/{year}/{id}")]
-    async fn get_chair(&self, path: gropius::Path<ChairPath>) -> Result<ChairResponse, ChairError>;
+    async fn get_chair(
+        &self,
+        path: gropius::Path<(u32, String)>,
+    ) -> Result<ChairResponse, ChairError>;
 
     #[endpoint(POST, "/v1/chairs")]
     async fn create_chair(
@@ -85,24 +82,27 @@ impl ChairApi for Server {
         })
     }
 
-    async fn get_chair(&self, path: gropius::Path<ChairPath>) -> Result<ChairResponse, ChairError> {
-        let designed = match path.id.as_str() {
+    async fn get_chair(
+        &self,
+        path: gropius::Path<(u32, String)>,
+    ) -> Result<ChairResponse, ChairError> {
+        let designed = match path.1.as_str() {
             "F51" => 1920,
             "D51" => 1922,
             "W199" => 1951,
             other => return Err(ChairError::NotFound(format!("no chair model {other}"))),
         };
 
-        if path.year != designed {
+        if path.0 != designed {
             return Err(ChairError::WrongYear(format!(
                 "{} was designed in {designed}, not {}",
-                path.id, path.year
+                path.1, path.0
             )));
         }
 
         Ok(ChairResponse {
-            model: path.id.clone(),
-            year: path.year,
+            model: path.1.clone(),
+            year: path.0,
         })
     }
 }
