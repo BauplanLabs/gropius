@@ -1,0 +1,29 @@
+[general]
+ignore-merge-commits=true
+ignore-squash-commits=true
+ignore-revert-commits=true
+ignore-fixup-commits=true
+ignore-fixup-amend-commits=true
+
+fail-without-commits=true
+
+# https://github.com/jorisroovers/gitlint/issues/254
+regex-style-search=true
+
+# Enable conventional commit parsing.
+contrib=contrib-title-conventional-commits
+
+# Escape hatch: use the prefix "wip" to disable linting
+[ignore-by-title]
+regex=^[Ww]ip(.*)
+
+[contrib-title-conventional-commits]
+types = fix,feat,chore,docs,style,refactor,perf,test,revert,build
+
+[ignore-by-author-name]
+regex=(dependabot|github-actions)
+ignore=all
+
+[ignore-by-body]
+regex=^\s*https?:\/\/
+ignore=body-max-line-length
