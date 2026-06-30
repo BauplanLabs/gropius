@@ -350,8 +350,6 @@ pub(crate) fn expand(attr: TokenStream, mut item_trait: ItemTrait) -> TokenStrea
 
 /// Parses an endpoint method. Removes the `#[endpoint(...)] annotation.
 fn parse_endpoint(method: &mut TraitItemFn) -> Result<RawEndpoint, Diagnostic> {
-    // Save the return type span before desugaring rewrites it.
-    let return_type_span = method.sig.output.span();
     let span = method.sig.ident.span();
     desugar_async(&mut method.sig);
 
@@ -361,9 +359,7 @@ fn parse_endpoint(method: &mut TraitItemFn) -> Result<RawEndpoint, Diagnostic> {
         .next();
 
     let Some(attr) = attr else {
-        return Err(method
-            .span()
-            .error("expected #[endpoint(...)] attribute on method"));
+        return Err(span.error("expected #[endpoint(...)] attribute on method"));
     };
 
     let parsed: EndpointAttr = attr
@@ -379,7 +375,7 @@ fn parse_endpoint(method: &mut TraitItemFn) -> Result<RawEndpoint, Diagnostic> {
     match inputs.next() {
         Some(FnArg::Receiver(r)) if r.mutability.is_none() => (),
         _ => {
-            return Err(method.span().error("expected `&self` as first argument"));
+            return Err(span.error("expected `&self` as first argument"));
         }
     };
 
@@ -388,9 +384,17 @@ fn parse_endpoint(method: &mut TraitItemFn) -> Result<RawEndpoint, Diagnostic> {
             unreachable!()
         };
 
-        let out_of_order = ty
-            .span()
-            .error("arguments must be in order: Path, Query, Body, Request");
+        // Point at the extractor itself (`Path`/`Query`/`Body`), not the
+        // binding or the leading path segment.
+        let extractor_span = if let Type::Path(p) = ty.deref()
+            && let Some(last) = p.path.segments.last()
+        {
+            last.ident.span()
+        } else {
+            input.span()
+        };
+        let out_of_order =
+            extractor_span.error("arguments must be in order: Path, Query, Body, Request");
 
         if let Some(inner) = parse_extractor(ty, "Path") {
             if query_type.is_some() || request_type.is_some() || raw_request {
@@ -422,8 +426,14 @@ fn parse_endpoint(method: &mut TraitItemFn) -> Result<RawEndpoint, Diagnostic> {
         }
     }
 
-    let (response_type, error_type) = parse_result_type(&method.sig.output)
-        .ok_or_else(|| return_type_span.error("expected return type Result<R, E>"))?;
+    let Some((response_type, error_type)) = parse_result_type(&method.sig.output) else {
+        let return_type_span = match &method.sig.output {
+            ReturnType::Type(_, ty) => ty.span(),
+            ReturnType::Default => method.sig.ident.span(),
+        };
+
+        return Err(return_type_span.error("expected return type Result<R, E>"));
+    };
 
     let response_kind = if let Type::Path(p) = &response_type
         && let Some(last) = p.path.segments.last()

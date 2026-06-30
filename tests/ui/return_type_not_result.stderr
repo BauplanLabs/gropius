@@ -1,5 +1,5 @@
 error: expected return type Result<R, E>
-  --> tests/ui/return_type_not_result.rs:16:34
+  --> tests/ui/return_type_not_result.rs:16:37
    |
 16 |     async fn not_a_result(&self) -> MyError;
-   |                                  ^
+   |                                     ^^^^^^^
