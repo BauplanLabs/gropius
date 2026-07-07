@@ -31,22 +31,22 @@ exclude = [
 ]
 
 [dependencies]
-bytes = "1.12"
-form_urlencoded = "1.2"
+bytes = "1"
+form_urlencoded = "1"
 gropius-macros = { path = "gropius-macros" }
-http = "1.4"
+http = "1"
 http-body = "1"
 http-body-util = "0.1"
-indexmap = "2.14"
+indexmap = "2"
 matchit.workspace = true
 oas3 = "0.22"
-schemars = "1.2"
-serde = { version = "1.0", features = ["derive"] }
+schemars = "1"
+serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 serde_path_to_error = "0.1"
 serde_urlencoded = "0.7"
 serde_yaml_ng = "0.10"
-smallvec = "1.15"
+smallvec = "1"
 thiserror = "2"
 tower = "0.5"
 
@@ -54,7 +54,7 @@ tower = "0.5"
 anyhow = "1"
 hyper = { version = "1", features = ["server", "http1"] }
 hyper-util = { version = "0.1", features = ["tokio", "service"] }
-insta = { version = "1.48", features = ["yaml"] }
+insta = { version = "1", features = ["yaml"] }
 tokio = { version = "1", features = ["macros", "net", "rt-multi-thread"] }
 tokio-test = "0.4"
 tower = { version = "0.5", features = ["util"] }
