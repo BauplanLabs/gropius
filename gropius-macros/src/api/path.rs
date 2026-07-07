@@ -64,11 +64,8 @@ pub(crate) fn parameter_names(path: &str) -> Vec<&str> {
     let mut names = Vec::new();
     let mut rest = path;
 
-    loop {
+    while let Some(open) = rest.find('{') {
         // Move to the start of the next `{...}` expression.
-        let Some(open) = rest.find('{') else {
-            break;
-        };
         rest = &rest[open + 1..];
 
         // The name runs up to the closing brace.
