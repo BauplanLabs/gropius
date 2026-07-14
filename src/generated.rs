@@ -97,8 +97,8 @@ pub struct Endpoint {
     pub request_type: Option<SchemaFn>,
     /// The kind of success response.
     pub response_type: ResponseType,
-    /// Schema of the error response body.
-    pub error_type: SchemaFn,
+    /// Schema of the error response body. `None` for infallible endpoints.
+    pub error_type: Option<SchemaFn>,
 }
 
 /// Construct a response for an http handler.

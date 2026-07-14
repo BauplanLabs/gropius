@@ -1,3 +1,5 @@
+use std::convert::Infallible;
+
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
@@ -62,6 +64,10 @@ trait ChairApi {
 
     #[endpoint(GET, "/v1/cursed")]
     async fn cursed(&self) -> Result<Cursed, ChairError>;
+
+    /// An endpoint that never fails.
+    #[endpoint(GET, "/v1/health")]
+    async fn health(&self) -> Result<ChairResponse, Infallible>;
 }
 
 #[derive(Clone)]
@@ -79,6 +85,13 @@ impl ChairApi for Server {
         Ok(ChairResponse {
             model: body.model.clone(),
             year: body.year,
+        })
+    }
+
+    async fn health(&self) -> Result<ChairResponse, Infallible> {
+        Ok(ChairResponse {
+            model: "healthy".to_string(),
+            year: 2026,
         })
     }
 
@@ -305,6 +318,20 @@ async fn api_impl() -> anyhow::Result<()> {
         let body: ChairResponse = serde_json::from_slice(resp.body())?;
         assert_eq!(body.model, "B32");
         assert_eq!(body.year, 1928);
+    }
+
+    // Infallible endpoint.
+    {
+        let req = http::Request::builder()
+            .method(http::Method::GET)
+            .uri("/v1/health")
+            .body(bytes::Bytes::new())?;
+
+        let resp = router.dispatch(req).await;
+        assert_eq!(resp.status(), 200);
+
+        let body: ChairResponse = serde_json::from_slice(resp.body())?;
+        assert_eq!(body.model, "healthy");
     }
 
     Ok(())

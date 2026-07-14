@@ -32,13 +32,6 @@ paths:
                 $ref: "#/components/schemas/GetFooError"
 components:
   schemas:
-    GetFooError:
-      properties:
-        msg:
-          type: string
-      type: object
-      required:
-        - msg
     FooResponse:
       properties:
         bar:
@@ -51,3 +44,10 @@ components:
       required:
         - bar
         - baz
+    GetFooError:
+      properties:
+        msg:
+          type: string
+      type: object
+      required:
+        - msg

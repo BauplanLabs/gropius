@@ -183,8 +183,6 @@ fn build_operation(
         None
     };
 
-    let error_schema = resolve_schema(ep.error_type, generator)?;
-
     let mut responses = Map::new();
 
     let success_response = match ep.response_type {
@@ -218,14 +216,17 @@ fn build_operation(
         "200".to_string(),
         ObjectOrReference::Object(success_response),
     );
-    responses.insert(
-        "default".to_string(),
-        ObjectOrReference::Object(Response {
-            description: Some("error".to_string()),
-            content: make_json_content(error_schema),
-            ..Default::default()
-        }),
-    );
+    if let Some(error_schema_fn) = ep.error_type {
+        let error_schema = resolve_schema(error_schema_fn, generator)?;
+        responses.insert(
+            "default".to_string(),
+            ObjectOrReference::Object(Response {
+                description: Some("error".to_string()),
+                content: make_json_content(error_schema),
+                ..Default::default()
+            }),
+        );
+    }
 
     Ok(Operation {
         operation_id: Some(ep.name.to_string()),

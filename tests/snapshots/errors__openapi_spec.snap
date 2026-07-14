@@ -84,8 +84,31 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ChairError"
+  /v1/health:
+    get:
+      description: An endpoint that never fails.
+      operationId: health
+      responses:
+        "200":
+          description: successful operation
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ChairResponse"
 components:
   schemas:
+    ChairResponse:
+      properties:
+        model:
+          type: string
+        year:
+          type: integer
+          minimum: 0
+          format: uint32
+      type: object
+      required:
+        - model
+        - year
     ChairError:
       oneOf:
         - properties:
@@ -110,18 +133,6 @@ components:
           required:
             - error
             - msg
-    ChairResponse:
-      properties:
-        model:
-          type: string
-        year:
-          type: integer
-          minimum: 0
-          format: uint32
-      type: object
-      required:
-        - model
-        - year
     Cursed:
       enum:
         - ~

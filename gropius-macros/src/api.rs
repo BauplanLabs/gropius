@@ -100,6 +100,7 @@ struct RawEndpoint {
     response_kind: ResponseKind,
     content_type: Option<syn::LitStr>,
     error_type: Type,
+    infallible: bool,
 }
 
 pub(crate) fn expand(attr: TokenStream, mut item_trait: ItemTrait) -> TokenStream {
@@ -160,8 +161,12 @@ pub(crate) fn expand(attr: TokenStream, mut item_trait: ItemTrait) -> TokenStrea
             }
         };
 
-        let error_schema = quote_spanned! { span =>
-            |g: &mut ::schemars::SchemaGenerator| g.subschema_for::<#error_type>()
+        let error_schema = if ep.infallible {
+            quote! { None }
+        } else {
+            quote_spanned! { span =>
+                Some(|g: &mut ::schemars::SchemaGenerator| g.subschema_for::<#error_type>())
+            }
         };
 
         quote! {
@@ -241,6 +246,17 @@ pub(crate) fn expand(attr: TokenStream, mut item_trait: ItemTrait) -> TokenStrea
             ResponseKind::Raw => quote! { Ok(v) },
         };
 
+        let err_branch = if ep.infallible {
+            quote! { Err(e) => match e {} }
+        } else {
+            quote! {
+                Err(e) => {
+                    let status = ::gropius::ApiError::status_code(&e);
+                    ::gropius::generated::make_json_response(&e, status)
+                }
+            }
+        };
+
         quote_spanned! { span =>
             ::std::sync::Arc::new({
                 let this = self.clone();
@@ -251,10 +267,7 @@ pub(crate) fn expand(attr: TokenStream, mut item_trait: ItemTrait) -> TokenStrea
                     ::std::boxed::Box::pin(async move {
                         match this.#name(#(#args),*).await {
                             Ok(v) => { let _ = v; #ok_branch },
-                            Err(e) => {
-                                let status = ::gropius::ApiError::status_code(&e);
-                                ::gropius::generated::make_json_response(&e, status)
-                            }
+                            #err_branch
                         }
                     })
                 }
@@ -322,11 +335,13 @@ pub(crate) fn expand(attr: TokenStream, mut item_trait: ItemTrait) -> TokenStrea
             }});
         }
 
-        let error_type = &ep.error_type;
-        checks.push(quote_spanned! { error_type.span() => {
-            fn check<T: ::gropius::ApiError + ::serde::Serialize + ::schemars::JsonSchema>() {}
-            check::<#error_type>();
-        }});
+        if !ep.infallible {
+            let error_type = &ep.error_type;
+            checks.push(quote_spanned! { error_type.span() => {
+                fn check<T: ::gropius::ApiError + ::serde::Serialize + ::schemars::JsonSchema>() {}
+                check::<#error_type>();
+            }});
+        }
 
         quote! { #(#checks)* }
     });
@@ -448,6 +463,14 @@ fn parse_endpoint(method: &mut TraitItemFn) -> Result<RawEndpoint, Diagnostic> {
         ResponseKind::Json(Box::new(response_type))
     };
 
+    let infallible = if let Type::Path(p) = &error_type
+        && let Some(last) = p.path.segments.last()
+    {
+        last.ident == "Infallible"
+    } else {
+        false
+    };
+
     Ok(RawEndpoint {
         span,
         name: method.sig.ident.clone(),
@@ -461,6 +484,7 @@ fn parse_endpoint(method: &mut TraitItemFn) -> Result<RawEndpoint, Diagnostic> {
         response_kind,
         content_type: parsed.content_type,
         error_type,
+        infallible,
     })
 }
 
