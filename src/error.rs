@@ -37,6 +37,10 @@ pub enum RouterError {
         #[source]
         source: serde::de::value::Error,
     },
+    /// Failed to read the request body from the client. This can happen if
+    /// the client hangs up early.
+    #[error("failed to read request body")]
+    ReadBody,
     /// Failed to deserialize the request body.
     #[error("invalid request body")]
     InvalidBody {
@@ -59,6 +63,7 @@ impl RouterError {
             Self::MethodNotAllowed { .. } => http::StatusCode::METHOD_NOT_ALLOWED,
             Self::InvalidPath { .. } => http::StatusCode::NOT_FOUND,
             Self::InvalidQueryString { .. } => http::StatusCode::BAD_REQUEST,
+            Self::ReadBody => http::StatusCode::BAD_REQUEST,
             Self::InvalidBody { .. } => http::StatusCode::BAD_REQUEST,
             Self::ResponseSerialization(_) => http::StatusCode::INTERNAL_SERVER_ERROR,
         }

@@ -125,9 +125,10 @@ fn error_handler(err: gropius::RouterError) -> http::Response<bytes::Bytes> {
     let error_code = match &err {
         gropius::RouterError::NotFound => "NOT_FOUND",
         gropius::RouterError::MethodNotAllowed { .. } => "METHOD_NOT_ALLOWED",
-        gropius::RouterError::InvalidPath { .. } => "BAD_PATH",
-        gropius::RouterError::InvalidQueryString { .. } => "BAD_QUERY",
-        gropius::RouterError::InvalidBody { .. } => "BAD_BODY",
+        gropius::RouterError::InvalidPath { .. } => "BAD_REQUEST",
+        gropius::RouterError::InvalidQueryString { .. } => "BAD_REQUEST",
+        gropius::RouterError::ReadBody => "BAD_REQUEST",
+        gropius::RouterError::InvalidBody { .. } => "BAD_REQUEST",
         gropius::RouterError::ResponseSerialization(_) => "INTERNAL_ERROR",
     };
 
@@ -238,7 +239,7 @@ async fn api_impl() -> anyhow::Result<()> {
         assert_eq!(resp.status(), 404);
 
         let body: ErrorBody = serde_json::from_slice(resp.body())?;
-        assert_eq!(body.error, "BAD_PATH");
+        assert_eq!(body.error, "BAD_REQUEST");
     }
 
     // POST to a GET-only route.
@@ -286,7 +287,7 @@ async fn api_impl() -> anyhow::Result<()> {
         assert_eq!(resp.status(), 400);
 
         let body: ErrorBody = serde_json::from_slice(resp.body())?;
-        assert_eq!(body.error, "BAD_BODY");
+        assert_eq!(body.error, "BAD_REQUEST");
     }
 
     // JSON body with missing field.
@@ -300,7 +301,7 @@ async fn api_impl() -> anyhow::Result<()> {
         assert_eq!(resp.status(), 400);
 
         let body: ErrorBody = serde_json::from_slice(resp.body())?;
-        assert_eq!(body.error, "BAD_BODY");
+        assert_eq!(body.error, "BAD_REQUEST");
     }
 
     // Valid JSON body.

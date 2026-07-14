@@ -1,4 +1,4 @@
-use std::{collections::BTreeMap, pin::Pin, sync::Arc, task::Poll};
+use std::{collections::BTreeMap, convert::Infallible, pin::Pin, sync::Arc, task::Poll};
 
 use http_body::Body;
 use http_body_util::{BodyExt, Full};
@@ -240,10 +240,9 @@ impl<B> tower::Service<http::Request<B>> for Router
 where
     B: Body + Send + 'static,
     B::Data: Send,
-    B::Error: Into<Box<dyn std::error::Error + Send + Sync>>,
 {
     type Response = http::Response<Full<bytes::Bytes>>;
-    type Error = B::Error;
+    type Error = Infallible;
     type Future = Pin<Box<dyn Future<Output = Result<Self::Response, Self::Error>> + Send>>;
 
     fn poll_ready(&mut self, _cx: &mut std::task::Context<'_>) -> Poll<Result<(), Self::Error>> {
@@ -255,9 +254,15 @@ where
 
         Box::pin(async move {
             let (parts, body) = req.into_parts();
-            let body = body.collect().await?.to_bytes();
-            let req = http::Request::from_parts(parts, body);
+            let body = match body.collect().await {
+                Ok(collected) => collected.to_bytes(),
+                Err(_) => {
+                    let resp = (this.error_handler)(RouterError::ReadBody);
+                    return Ok(resp.map(Full::new));
+                }
+            };
 
+            let req = http::Request::from_parts(parts, body);
             let resp = this.dispatch(req).await;
             Ok(resp.map(Full::new))
         })

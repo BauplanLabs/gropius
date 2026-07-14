@@ -52,6 +52,7 @@ tower = "0.5"
 
 [dev-dependencies]
 anyhow = "1"
+axum = "0.8"
 hyper = { version = "1", features = ["server", "http1"] }
 hyper-util = { version = "0.1", features = ["tokio", "service"] }
 insta = { version = "1", features = ["yaml"] }
