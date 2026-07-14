@@ -6,6 +6,12 @@ use bytes::{BufMut, Bytes, BytesMut};
 use schemars::{Schema, SchemaGenerator};
 use serde::Serialize;
 
+// Reexports used by the macro.
+pub use bytes;
+pub use http;
+pub use schemars;
+pub use serde;
+
 use crate::RouterError;
 
 type BoxFuture<T> = Pin<Box<dyn Future<Output = T> + Send>>;

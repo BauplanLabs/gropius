@@ -151,7 +151,7 @@ pub(crate) fn expand(attr: TokenStream, mut item_trait: ItemTrait) -> TokenStrea
         let response_schema = match &ep.response_kind {
             ResponseKind::Json(ty) => quote_spanned! { span =>
                 ::gropius::generated::ResponseType::Json(
-                    |g: &mut ::schemars::SchemaGenerator| g.subschema_for::<#ty>()
+                    |g: &mut ::gropius::generated::schemars::SchemaGenerator| g.subschema_for::<#ty>()
                 )
             },
             ResponseKind::Empty => quote! { ::gropius::generated::ResponseType::Empty },
@@ -165,13 +165,13 @@ pub(crate) fn expand(attr: TokenStream, mut item_trait: ItemTrait) -> TokenStrea
             quote! { None }
         } else {
             quote_spanned! { span =>
-                Some(|g: &mut ::schemars::SchemaGenerator| g.subschema_for::<#error_type>())
+                Some(|g: &mut ::gropius::generated::schemars::SchemaGenerator| g.subschema_for::<#error_type>())
             }
         };
 
         quote! {
             ::gropius::generated::Endpoint {
-                method: &::http::Method::#method,
+                method: &::gropius::generated::http::Method::#method,
                 path: #path,
                 path_params: &[#(#path_param_names),*],
                 name: #name_str,
@@ -235,12 +235,12 @@ pub(crate) fn expand(attr: TokenStream, mut item_trait: ItemTrait) -> TokenStrea
 
         let ok_branch = match &ep.response_kind {
             ResponseKind::Json(_) => quote_spanned! { span =>
-                ::gropius::generated::make_json_response(&v, ::http::StatusCode::OK)
+                ::gropius::generated::make_json_response(&v, ::gropius::generated::http::StatusCode::OK)
             },
             ResponseKind::Empty => quote! {
-                Ok(::http::Response::builder()
-                    .status(::http::StatusCode::OK)
-                    .body(::bytes::Bytes::new())
+                Ok(::gropius::generated::http::Response::builder()
+                    .status(::gropius::generated::http::StatusCode::OK)
+                    .body(::gropius::generated::bytes::Bytes::new())
                     .unwrap())
             },
             ResponseKind::Raw => quote! { Ok(v) },
@@ -323,14 +323,14 @@ pub(crate) fn expand(attr: TokenStream, mut item_trait: ItemTrait) -> TokenStrea
             .flatten()
         {
             checks.push(quote_spanned! { ty.span() => {
-                fn check<T: ::serde::de::DeserializeOwned + ::schemars::JsonSchema>() {}
+                fn check<T: ::gropius::generated::serde::de::DeserializeOwned + ::gropius::generated::schemars::JsonSchema>() {}
                 check::<#ty>();
             }});
         }
 
         if let ResponseKind::Json(ty) = &ep.response_kind {
             checks.push(quote_spanned! { ty.span() => {
-                fn check<T: ::serde::Serialize + ::schemars::JsonSchema>() {}
+                fn check<T: ::gropius::generated::serde::Serialize + ::gropius::generated::schemars::JsonSchema>() {}
                 check::<#ty>();
             }});
         }
@@ -338,7 +338,7 @@ pub(crate) fn expand(attr: TokenStream, mut item_trait: ItemTrait) -> TokenStrea
         if !ep.infallible {
             let error_type = &ep.error_type;
             checks.push(quote_spanned! { error_type.span() => {
-                fn check<T: ::gropius::ApiError + ::serde::Serialize + ::schemars::JsonSchema>() {}
+                fn check<T: ::gropius::ApiError + ::gropius::generated::serde::Serialize + ::gropius::generated::schemars::JsonSchema>() {}
                 check::<#error_type>();
             }});
         }
@@ -558,10 +558,10 @@ fn parse_result_type(output: &ReturnType) -> Option<(Type, Type)> {
 fn schema_fn(ty: Option<&Type>, optional: bool, span: Span) -> TokenStream {
     match (ty, optional) {
         (Some(ty), true) => {
-            quote_spanned! { span => Some(<#ty as ::schemars::JsonSchema>::json_schema) }
+            quote_spanned! { span => Some(<#ty as ::gropius::generated::schemars::JsonSchema>::json_schema) }
         }
         (Some(ty), false) => {
-            quote_spanned! { span => <#ty as ::schemars::JsonSchema>::json_schema }
+            quote_spanned! { span => <#ty as ::gropius::generated::schemars::JsonSchema>::json_schema }
         }
         (None, _) => quote! { None },
     }
