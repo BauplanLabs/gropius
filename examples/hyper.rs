@@ -17,15 +17,10 @@ struct Widget {
     name: String,
 }
 
-#[derive(Serialize, JsonSchema)]
+#[derive(Serialize, JsonSchema, gropius::ApiError)]
+#[api_error(404)]
 struct WidgetError {
     error: String,
-}
-
-impl gropius::ApiError for WidgetError {
-    fn status_code(&self) -> http::StatusCode {
-        http::StatusCode::NOT_FOUND
-    }
 }
 
 #[gropius::api]

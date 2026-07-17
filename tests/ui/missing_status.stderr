@@ -1,0 +1,11 @@
+error: missing `#[api_error(...)]` attribute
+ --> tests/ui/missing_status.rs:8:5
+  |
+8 |     NotFound(String),
+  |     ^^^^^^^^
+
+error: missing `#[api_error(...)]` attribute
+ --> tests/ui/missing_status.rs:9:5
+  |
+9 |     Stolen(String),
+  |     ^^^^^^

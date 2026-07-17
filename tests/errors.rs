@@ -9,22 +9,26 @@ struct ErrorBody {
     msg: String,
 }
 
-#[derive(Debug, Clone, Serialize, JsonSchema)]
+#[derive(Debug, Clone, Serialize, JsonSchema, gropius::ApiError)]
+#[serde(tag = "error", content = "msg")]
+enum AuthError {
+    #[serde(rename = "UNAUTHORIZED")]
+    #[api_error(401)]
+    Unauthorized(String),
+}
+
+#[derive(Debug, Clone, Serialize, JsonSchema, gropius::ApiError)]
 #[serde(tag = "error", content = "msg")]
 enum ChairError {
     #[serde(rename = "WRONG_YEAR")]
+    #[api_error(400)]
     WrongYear(String),
     #[serde(rename = "CHAIR_NOT_FOUND")]
+    #[api_error(404)]
     NotFound(String),
-}
-
-impl gropius::ApiError for ChairError {
-    fn status_code(&self) -> http::StatusCode {
-        match self {
-            ChairError::WrongYear(_) => http::StatusCode::BAD_REQUEST,
-            ChairError::NotFound(_) => http::StatusCode::NOT_FOUND,
-        }
-    }
+    #[serde(untagged)]
+    #[api_error(transparent)]
+    Auth(AuthError),
 }
 
 #[derive(Default, Clone, Serialize, Deserialize, JsonSchema)]
@@ -68,6 +72,12 @@ trait ChairApi {
     /// An endpoint that never fails.
     #[endpoint(GET, "/v1/health")]
     async fn health(&self) -> Result<ChairResponse, Infallible>;
+
+    #[endpoint(DELETE, "/v1/chairs/{year}/{id}")]
+    async fn delete_chair(
+        &self,
+        path: gropius::Path<(u32, String)>,
+    ) -> Result<gropius::EmptyResponse, ChairError>;
 }
 
 #[derive(Clone)]
@@ -93,6 +103,15 @@ impl ChairApi for Server {
             model: "healthy".to_string(),
             year: 2026,
         })
+    }
+
+    async fn delete_chair(
+        &self,
+        _path: gropius::Path<(u32, String)>,
+    ) -> Result<gropius::EmptyResponse, ChairError> {
+        Err(ChairError::Auth(AuthError::Unauthorized(
+            "no api key".to_string(),
+        )))
     }
 
     async fn get_chair(
@@ -143,6 +162,32 @@ fn error_handler(err: gropius::RouterError) -> http::Response<bytes::Bytes> {
 
     resp.body(bytes::Bytes::from(serde_json::to_vec(&body).unwrap()))
         .unwrap()
+}
+
+#[test]
+fn derived_status_codes() {
+    use gropius::ApiError as _;
+
+    #[derive(Serialize, JsonSchema, gropius::ApiError)]
+    #[api_error(http::StatusCode::IM_A_TEAPOT)]
+    struct Teapot {
+        msg: String,
+    }
+
+    let teapot = Teapot { msg: String::new() };
+    assert_eq!(teapot.status_code(), 418);
+
+    #[derive(Serialize, JsonSchema, gropius::ApiError)]
+    #[api_error(http::StatusCode::GONE)]
+    struct Gone<T> {
+        last: T,
+    }
+
+    let gone = Gone { last: "chair" };
+    assert_eq!(gone.status_code(), 410);
+
+    let unauthorized = ChairError::Auth(AuthError::Unauthorized(String::new()));
+    assert_eq!(unauthorized.status_code(), 401);
 }
 
 #[tokio::test]
@@ -204,6 +249,27 @@ async fn api_impl() -> anyhow::Result<()> {
             ErrorBody {
                 error: "CHAIR_NOT_FOUND".into(),
                 msg: "no chair model X99".into(),
+            }
+        );
+    }
+
+    // Composed error: the shared AuthError surfaces through the untagged
+    // transparent variant, keeping its own status and wire shape.
+    {
+        let req = http::Request::builder()
+            .method(http::Method::DELETE)
+            .uri("/v1/chairs/1920/F51")
+            .body(bytes::Bytes::new())?;
+
+        let resp = router.dispatch(req).await;
+        assert_eq!(resp.status(), 401);
+
+        let body: ErrorBody = serde_json::from_slice(resp.body())?;
+        assert_eq!(
+            body,
+            ErrorBody {
+                error: "UNAUTHORIZED".into(),
+                msg: "no api key".into(),
             }
         );
     }

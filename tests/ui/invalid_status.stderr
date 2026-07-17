@@ -1,0 +1,5 @@
+error: status code must be in the 100-999 range accepted by `http::StatusCode`
+ --> tests/ui/invalid_status.rs:6:17
+  |
+6 |     #[api_error(42)]
+  |                 ^^

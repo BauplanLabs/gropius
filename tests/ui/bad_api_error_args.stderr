@@ -1,0 +1,5 @@
+error: expected a status code or `transparent`
+ --> tests/ui/bad_api_error_args.rs:6:22
+  |
+6 |     #[api_error(code = 400)]
+  |                      ^
