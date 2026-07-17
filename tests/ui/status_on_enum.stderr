@@ -1,0 +1,5 @@
+error: put `#[api_error(...)]` on each variant, not on the enum
+ --> tests/ui/status_on_enum.rs:5:1
+  |
+5 | #[api_error(400)]
+  | ^

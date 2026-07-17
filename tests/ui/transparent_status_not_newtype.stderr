@@ -1,0 +1,5 @@
+error: `#[api_error(transparent)]` requires a newtype variant
+ --> tests/ui/transparent_status_not_newtype.rs:6:17
+  |
+6 |     #[api_error(transparent)]
+  |                 ^^^^^^^^^^^

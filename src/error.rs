@@ -2,6 +2,8 @@ use schemars::JsonSchema;
 use serde::Serialize;
 
 /// An error type for an endpoint.
+///
+/// Can be derived; see [`derive(ApiError)`](derive@crate::ApiError).
 pub trait ApiError: Serialize + JsonSchema {
     /// The status code of the error.
     fn status_code(&self) -> http::StatusCode;

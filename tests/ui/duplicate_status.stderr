@@ -1,0 +1,5 @@
+error: duplicate `#[api_error(...)]` attribute
+ --> tests/ui/duplicate_status.rs:7:5
+  |
+7 |     #[api_error(404)]
+  |     ^

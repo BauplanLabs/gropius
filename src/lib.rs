@@ -31,16 +31,11 @@
 //!     name: String
 //! }
 //!
-//! #[derive(Serialize, Deserialize, JsonSchema)]
+//! #[derive(Serialize, Deserialize, JsonSchema, gropius::ApiError)]
+//! #[api_error(500)]
 //! struct Error {
 //!     code: String,
 //!     msg: String
-//! }
-//!
-//! impl gropius::ApiError for Error {
-//!      fn status_code(&self) -> http::StatusCode {
-//!          http::StatusCode::INTERNAL_SERVER_ERROR
-//!      }
 //! }
 //!
 //! #[gropius::api]
@@ -110,7 +105,31 @@
 //!
 //! The error type is for non-200 responses. In addition to `Serialize` and
 //! `JsonSchema`, it must implement [`ApiError`], in order to provide a status
-//! code.
+//! code. The trait can be derived, mapping each variant to a status. A newtype
+//! variant can delegate to a shared error type with `#[api_error(transparent)]`:
+//!
+//! ```rust
+//! # use serde::Serialize;
+//! # use schemars::JsonSchema;
+//! #[derive(Serialize, JsonSchema, gropius::ApiError)]
+//! #[serde(tag = "error", content = "msg")]
+//! enum AuthError {
+//!     #[api_error(401)]
+//!     Unauthorized(String),
+//! }
+//!
+//! #[derive(Serialize, JsonSchema, gropius::ApiError)]
+//! #[serde(tag = "error", content = "msg")]
+//! enum ChairError {
+//!     #[api_error(400)]
+//!     WrongYear(String),
+//!     #[api_error(404)]
+//!     NotFound(String),
+//!     #[serde(untagged)]
+//!     #[api_error(transparent)]
+//!     Auth(AuthError),
+//! }
+//! ```
 //!
 //! ### Custom content-type
 //!
@@ -336,7 +355,7 @@ pub mod generated;
 
 pub use error::{ApiError, ErrorHandler, RouterError, default_error_handler};
 pub use extractors::*;
-pub use gropius_macros::api;
+pub use gropius_macros::{ApiError, api};
 pub use router::*;
 pub use spec::{SpecError, Specification};
 
