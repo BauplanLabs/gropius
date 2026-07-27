@@ -21,3 +21,9 @@ error: path conflicts with `/items/{id}`
    |
 31 |     #[endpoint(GET, "/items/{name}")]
    |                     ^^^^^^^^^^^^^^^
+
+error: path parameter `4foo` must be a valid Rust identifier
+  --> tests/ui/invalid_paths.rs:34:21
+   |
+34 |     #[endpoint(GET, "/widgets/{4foo}")]
+   |                     ^^^^^^^^^^^^^^^^^

@@ -12,6 +12,9 @@ pub use http;
 pub use schemars;
 pub use serde;
 
+#[cfg(any(feature = "client-reqwest", feature = "client-ureq"))]
+pub mod client;
+
 use crate::RouterError;
 
 type BoxFuture<T> = Pin<Box<dyn Future<Output = T> + Send>>;

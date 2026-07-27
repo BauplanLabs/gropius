@@ -10,36 +10,49 @@ use syn::{
     Type, TypeParamBound,
 };
 
+mod client;
 mod path;
 
-/// Arguments to `#[gropius::api(tags = "...")]`.
+/// Arguments to `#[gropius::api(tags = ["..."], client(...))]`.
 struct ApiAttr {
     tags: Vec<syn::LitStr>,
+    client: Option<client::ClientAttr>,
 }
 
 impl syn::parse::Parse for ApiAttr {
     fn parse(input: syn::parse::ParseStream) -> syn::Result<Self> {
         let mut tags = Vec::new();
+        let mut client = None;
 
         while !input.is_empty() {
             let key: syn::Ident = input.parse()?;
-            if key != "tags" {
-                return Err(syn::Error::new_spanned(key, "unknown attribute"));
+            match key.to_string().as_str() {
+                "tags" => {
+                    let _eq: syn::Token![=] = input.parse()?;
+                    let content;
+                    syn::bracketed!(content in input);
+                    let items = syn::punctuated::Punctuated::<
+                        syn::LitStr,
+                        syn::Token![,],
+                    >::parse_terminated(&content)?;
+                    tags.extend(items);
+                }
+                "client" => {
+                    if input.peek(syn::token::Paren) {
+                        let content;
+                        syn::parenthesized!(content in input);
+                        client = Some(content.parse()?);
+                    } else {
+                        client = Some(client::ClientAttr::default());
+                    }
+                }
+                _ => return Err(syn::Error::new_spanned(key, "unknown attribute")),
             }
-
-            let _eq: syn::Token![=] = input.parse()?;
-            let content;
-            syn::bracketed!(content in input);
-            let items =
-                syn::punctuated::Punctuated::<syn::LitStr, syn::Token![,]>::parse_terminated(
-                    &content,
-                )?;
-            tags.extend(items);
 
             let _ = input.parse::<syn::Token![,]>();
         }
 
-        Ok(ApiAttr { tags })
+        Ok(ApiAttr { tags, client })
     }
 }
 
@@ -106,11 +119,11 @@ struct RawEndpoint {
 pub(crate) fn expand(attr: TokenStream, mut item_trait: ItemTrait) -> TokenStream {
     let mut errors: Vec<Diagnostic> = Vec::new();
 
-    let tags = match syn::parse2::<ApiAttr>(attr) {
-        Ok(attr) => attr.tags,
+    let (tags, client) = match syn::parse2::<ApiAttr>(attr) {
+        Ok(attr) => (attr.tags, attr.client),
         Err(err) => {
             errors.push(err.span().error(err.to_string()));
-            Vec::new()
+            (Vec::new(), None)
         }
     };
 
@@ -346,6 +359,11 @@ pub(crate) fn expand(attr: TokenStream, mut item_trait: ItemTrait) -> TokenStrea
         quote! { #(#checks)* }
     });
 
+    let client_tokens = match &client {
+        Some(client) => client::generate_client(client, vis, trait_ident, &trait_name, &endpoints),
+        None => TokenStream::new(),
+    };
+
     quote! {
         #item_trait
 
@@ -360,6 +378,8 @@ pub(crate) fn expand(attr: TokenStream, mut item_trait: ItemTrait) -> TokenStrea
             },
             endpoints: &[#(#desc_tokens),*],
         };
+
+        #client_tokens
     }
 }
 

@@ -1,12 +1,9 @@
-//! Deserializer for matchit path parameters. A multi-segment path maps onto a
-//! struct or tuple; a single-segment path can also deserialize straight into a
-//! newtype or a bare value like `u64` or `String`.
-
+/// A deserializer for path params.
 use std::borrow::Cow;
 
 use serde::de;
 
-type Error = de::value::Error;
+pub(crate) type Error = de::value::Error;
 
 pub(crate) struct PathDeserializer<'de> {
     params: Vec<(&'de str, &'de str)>,
