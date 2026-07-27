@@ -31,6 +31,16 @@ pub(crate) fn validate(endpoints: &[RawEndpoint], errors: &mut Vec<Diagnostic>) 
             continue;
         }
 
+        // We require this for client generation, which uses the equivalent of
+        // `format!("/v1/{foo}/{bar}", foo, bar)` to create the path.
+        for name in parameter_names(&path) {
+            if param_ident(name).is_none() {
+                errors.push(span.error(format!(
+                    "path parameter `{name}` must be a valid Rust identifier"
+                )));
+            }
+        }
+
         if !routes.insert((&ep.method, path.to_string())) {
             errors.push(span.error(format!("duplicate route `{} {path}`", ep.method)));
             continue;
@@ -49,6 +59,12 @@ pub(crate) fn validate(endpoints: &[RawEndpoint], errors: &mut Vec<Diagnostic>) 
             }
         }
     }
+}
+
+pub(crate) fn param_ident(name: &str) -> Option<syn::Ident> {
+    syn::parse_str::<syn::Ident>(name)
+        .or_else(|_| syn::parse_str::<syn::Ident>(&format!("r#{name}")))
+        .ok()
 }
 
 /// Returns the parameter names in a path template, in order of appearance.

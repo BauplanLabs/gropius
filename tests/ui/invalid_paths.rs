@@ -30,6 +30,9 @@ trait Api {
 
     #[endpoint(GET, "/items/{name}")]
     async fn by_name(&self) -> Result<(), MyError>;
+
+    #[endpoint(GET, "/widgets/{4foo}")]
+    async fn bad_param(&self) -> Result<(), MyError>;
 }
 
 fn main() {}

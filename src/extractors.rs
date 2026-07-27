@@ -3,9 +3,7 @@ use std::{fmt, ops::Deref};
 use schemars::JsonSchema;
 use serde::de::DeserializeOwned;
 
-use crate::{Request, RouterError};
-
-mod path;
+use crate::{Request, RouterError, path};
 
 /// Extracts typed path parameters from the request URL.
 ///
@@ -87,7 +85,7 @@ pub struct Path<T: DeserializeOwned + JsonSchema> {
 impl<T: DeserializeOwned + JsonSchema> Path<T> {
     #[doc(hidden)]
     pub fn extract(params: &matchit::Params<'_, '_>) -> Result<Self, RouterError> {
-        let de = path::PathDeserializer::new(params);
+        let de = path::de::PathDeserializer::new(params);
         match T::deserialize(de) {
             Ok(inner) => Ok(Self { inner }),
             Err(err) => Err(RouterError::InvalidPath {

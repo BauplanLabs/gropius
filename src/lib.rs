@@ -17,7 +17,7 @@
 //! response body, and the error type:
 //!
 //! ```rust
-//! # use gropius::Path;
+//! # use gropius::{ApiError, Path};
 //! # use serde::{Deserialize, Serialize};
 //! # use schemars::JsonSchema;
 //! #
@@ -31,7 +31,7 @@
 //!     name: String
 //! }
 //!
-//! #[derive(Serialize, Deserialize, JsonSchema, gropius::ApiError)]
+//! #[derive(Serialize, Deserialize, JsonSchema, ApiError)]
 //! #[api_error(500)]
 //! struct Error {
 //!     code: String,
@@ -57,12 +57,12 @@
 //! [`serde::de::DeserializeOwned`] and [`schemars::JsonSchema`]:
 //!
 //! ```rust
-//! # use gropius::{Body, Path, Query, Request};
+//! # use gropius::{ApiError, Body, Path, Query, Request};
 //! # use serde::{Deserialize, Serialize};
 //! # use schemars::JsonSchema;
 //! # #[derive(Serialize, JsonSchema)]
 //! # struct Error;
-//! # impl gropius::ApiError for Error {
+//! # impl ApiError for Error {
 //! #     fn status_code(&self) -> http::StatusCode { http::StatusCode::INTERNAL_SERVER_ERROR }
 //! # }
 //! #
@@ -109,16 +109,17 @@
 //! variant can delegate to a shared error type with `#[api_error(transparent)]`:
 //!
 //! ```rust
+//! # use gropius::ApiError;
 //! # use serde::Serialize;
 //! # use schemars::JsonSchema;
-//! #[derive(Serialize, JsonSchema, gropius::ApiError)]
+//! #[derive(Serialize, JsonSchema, ApiError)]
 //! #[serde(tag = "error", content = "msg")]
 //! enum AuthError {
 //!     #[api_error(401)]
 //!     Unauthorized(String),
 //! }
 //!
-//! #[derive(Serialize, JsonSchema, gropius::ApiError)]
+//! #[derive(Serialize, JsonSchema, ApiError)]
 //! #[serde(tag = "error", content = "msg")]
 //! enum ChairError {
 //!     #[api_error(400)]
@@ -137,14 +138,15 @@
 //! the content-type:
 //!
 //! ```rust
+//! # use gropius::ApiError;
 //! # use serde::Serialize;
 //! # use schemars::JsonSchema;
 //! # #[derive(Debug, Serialize, JsonSchema)]
-//! # struct ApiError {
+//! # struct ImageApiError {
 //! #    message: String,
 //! # }
 //! #
-//! # impl gropius::ApiError for ApiError {
+//! # impl ApiError for ImageApiError {
 //! #    fn status_code(&self) -> http::StatusCode {
 //! #        http::StatusCode::INTERNAL_SERVER_ERROR
 //! #    }
@@ -153,7 +155,7 @@
 //! #[gropius::api]
 //! trait ImageApi {
 //!     #[endpoint(GET, "/image", content_type = "image/png")]
-//!     async fn get_image(&self) -> Result<gropius::Response, ApiError>;
+//!     async fn get_image(&self) -> Result<gropius::Response, ImageApiError>;
 //! }
 //! ```
 //!
@@ -180,7 +182,7 @@
 //! Implement the API trait to build a [`tower::Service`]:
 //!
 //! ```rust
-//! # use gropius::Path;
+//! # use gropius::{ApiError, Path};
 //! # use serde::{Deserialize, Serialize};
 //! # use schemars::JsonSchema;
 //! #
@@ -198,7 +200,7 @@
 //! #     msg: String
 //! # }
 //! #
-//! # impl gropius::ApiError for Error {
+//! # impl ApiError for Error {
 //! #     fn status_code(&self) -> http::StatusCode {
 //! #         http::StatusCode::INTERNAL_SERVER_ERROR
 //! #     }
@@ -230,7 +232,7 @@
 //! `tower::Service`:
 //!
 //! ```rust
-//! # use gropius::{Path, Router};
+//! # use gropius::{ApiError, Path, Router};
 //! # use serde::{Deserialize, Serialize};
 //! # use schemars::JsonSchema;
 //! #
@@ -248,7 +250,7 @@
 //! #     msg: String
 //! # }
 //! #
-//! # impl gropius::ApiError for Error {
+//! # impl ApiError for Error {
 //! #     fn status_code(&self) -> http::StatusCode {
 //! #         http::StatusCode::INTERNAL_SERVER_ERROR
 //! #     }
@@ -290,7 +292,7 @@
 //! generate a YAML or JSON OpenAPI document:
 //!
 //! ```rust
-//! # use gropius::{Path, Specification};
+//! # use gropius::{ApiError, Path, Specification};
 //! # use serde::{Deserialize, Serialize};
 //! # use schemars::JsonSchema;
 //! #
@@ -308,7 +310,7 @@
 //! #     msg: String
 //! # }
 //! #
-//! # impl gropius::ApiError for Error {
+//! # impl ApiError for Error {
 //! #     fn status_code(&self) -> http::StatusCode {
 //! #         http::StatusCode::INTERNAL_SERVER_ERROR
 //! #     }
@@ -327,6 +329,69 @@
 //!   .generate_yaml()?;
 //! # Ok(())
 //! # }
+//! ```
+//!
+//! ## Generating a client
+//!
+//! With the `client-reqwest` or `client-ureq` feature enabled, the `client`
+//! argument generates a client struct named `FooApiClient` next to the trait:
+//!
+//! ```no_run
+//! # use gropius::{ApiError, Path};
+//! # use serde::{Deserialize, Serialize};
+//! # use schemars::JsonSchema;
+//! # use thiserror::Error;
+//! #
+//! # #[derive(Serialize, Deserialize, JsonSchema)]
+//! # struct Widget {
+//! #   name: String
+//! # }
+//! #
+//! # #[derive(Debug, Serialize, Deserialize, JsonSchema, Error, ApiError)]
+//! # #[error("oops")]
+//! # #[api_error(404)]
+//! # struct Error {
+//! #     message: String
+//! # }
+//! #
+//! #
+//! # #[cfg(feature = "client-reqwest")]
+//! #[gropius::api(client(async))]
+//! trait WidgetApi {
+//!     #[endpoint(GET, "/v1/widgets/{id}")]
+//!     async fn get_widget(&self, path: Path<u64>) -> Result<Widget, Error>;
+//! }
+//!
+//! # #[cfg(feature = "client-reqwest")]
+//! # #[tokio::main]
+//! # async fn main() -> anyhow::Result<()> {
+//! let client = WidgetApiClient::new("https://api.example.com");
+//! let widget = client.get_widget(1234).await?;
+//! # Ok(())
+//! # }
+//! # #[cfg(not(feature = "client-reqwest"))]
+//! # fn main() {}
+//! ```
+//!
+//! Dropping `async` generates a blocking client instead, backed by
+//! `reqwest::blocking` or `ureq`, depending on which feature is enabled.
+//!
+//! A `cfg(...)` argument gates the generated client behind a `#[cfg(...)]`.
+//! For example, to make a test-only client for integration tests:
+//!
+//! ```
+//! # use gropius::{ApiError, Path};
+//! # use serde::{Deserialize, Serialize};
+//! # use schemars::JsonSchema;
+//! # #[derive(Serialize, Deserialize, JsonSchema)]
+//! # struct Widget { name: String }
+//! # #[derive(Serialize, Deserialize, JsonSchema, ApiError)]
+//! # #[api_error(404)]
+//! # struct Error { message: String }
+//! #[gropius::api(client(async, cfg(test)))]
+//! trait WidgetApi {
+//!     // ...
+//! }
 //! ```
 
 #![warn(
@@ -347,8 +412,16 @@
 
 mod error;
 mod extractors;
+pub(crate) mod path;
 mod router;
 mod spec;
+
+#[cfg(all(
+    feature = "client-reqwest",
+    feature = "client-ureq",
+    not(debug_assertions)
+))]
+compile_error!("the `client-reqwest` and `client-ureq` features are mutually exclusive");
 
 #[doc(hidden)]
 pub mod generated;
@@ -358,6 +431,13 @@ pub use extractors::*;
 pub use gropius_macros::{ApiError, api};
 pub use router::*;
 pub use spec::{SpecError, Specification};
+
+/// Client error types. See the
+/// [crate-level documentation](crate#generating-a-client) for more information.
+#[cfg(any(feature = "client-reqwest", feature = "client-ureq"))]
+pub mod client {
+    pub use crate::generated::client::{ClientError, RequestError, TransportError};
+}
 
 use bytes::Bytes;
 
@@ -370,13 +450,13 @@ use bytes::Bytes;
 /// headers, read the raw bytes of the request, or do something else custom.
 ///
 /// ```
+/// # use gropius::ApiError;
 /// # use schemars::JsonSchema;
 /// # use serde::Serialize;
 /// # #[derive(Serialize, JsonSchema)] struct MyError;
-/// # impl gropius::ApiError for MyError {
+/// # impl ApiError for MyError {
 /// #     fn status_code(&self) -> http::StatusCode { http::StatusCode::INTERNAL_SERVER_ERROR }
 /// # }
-/// #
 ///
 /// #[gropius::api]
 /// trait MyApi {
