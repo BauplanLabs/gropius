@@ -2,6 +2,8 @@
 //! struct or tuple; a single-segment path can also deserialize straight into a
 //! newtype or a bare value like `u64` or `String`.
 
+use std::borrow::Cow;
+
 use serde::de;
 
 type Error = de::value::Error;
@@ -123,6 +125,14 @@ impl<'de> de::Deserializer<'de> for PathDeserializer<'de> {
 
 struct ValueDeserializer<'de>(&'de str);
 
+impl<'de> ValueDeserializer<'de> {
+    fn decode(&self) -> Result<Cow<'de, str>, Error> {
+        percent_encoding::percent_decode_str(self.0)
+            .decode_utf8()
+            .map_err(|_| de::Error::custom("path parameter is not valid UTF-8"))
+    }
+}
+
 impl<'de> de::IntoDeserializer<'de, Error> for ValueDeserializer<'de> {
     type Deserializer = Self;
 
@@ -134,7 +144,7 @@ impl<'de> de::IntoDeserializer<'de, Error> for ValueDeserializer<'de> {
 macro_rules! parse_value {
     ($method:ident, $visit:ident, $ty:ty) => {
         fn $method<V: de::Visitor<'de>>(self, visitor: V) -> Result<V::Value, Error> {
-            match self.0.parse::<$ty>() {
+            match self.decode()?.parse::<$ty>() {
                 Ok(v) => visitor.$visit(v),
                 Err(_) => Err(de::Error::custom(concat!("expected ", stringify!($ty)))),
             }
@@ -146,7 +156,10 @@ impl<'de> de::Deserializer<'de> for ValueDeserializer<'de> {
     type Error = Error;
 
     fn deserialize_any<V: de::Visitor<'de>>(self, visitor: V) -> Result<V::Value, Error> {
-        visitor.visit_borrowed_str(self.0)
+        match self.decode()? {
+            Cow::Borrowed(s) => visitor.visit_borrowed_str(s),
+            Cow::Owned(s) => visitor.visit_string(s),
+        }
     }
 
     fn deserialize_option<V: de::Visitor<'de>>(self, visitor: V) -> Result<V::Value, Error> {
@@ -167,7 +180,10 @@ impl<'de> de::Deserializer<'de> for ValueDeserializer<'de> {
         _variants: &'static [&'static str],
         visitor: V,
     ) -> Result<V::Value, Error> {
-        visitor.visit_enum(de::value::BorrowedStrDeserializer::new(self.0))
+        match self.decode()? {
+            Cow::Borrowed(s) => visitor.visit_enum(de::value::BorrowedStrDeserializer::new(s)),
+            Cow::Owned(s) => visitor.visit_enum(de::value::StrDeserializer::new(&s)),
+        }
     }
 
     parse_value!(deserialize_bool, visit_bool, bool);
@@ -265,6 +281,55 @@ mod tests {
 
         let v: (String, u64) = Deserialize::deserialize(PathDeserializer::new(&matched.params))?;
         assert_eq!(v, ("acme".into(), 42));
+
+        Ok(())
+    }
+
+    #[test]
+    fn percent_decode() -> anyhow::Result<()> {
+        let mut router = matchit::Router::new();
+        router.insert("/{name}", ())?;
+        let matched = router.at("/a%20b%2Fc")?;
+
+        let v: String = Deserialize::deserialize(PathDeserializer::new(&matched.params))?;
+        assert_eq!(v, "a b/c");
+
+        Ok(())
+    }
+
+    #[test]
+    fn percent_decode_struct() -> anyhow::Result<()> {
+        #[derive(Deserialize, PartialEq, Debug)]
+        struct P {
+            org: String,
+            id: u64,
+        }
+
+        let mut router = matchit::Router::new();
+        router.insert("/{org}/{id}", ())?;
+        let matched = router.at("/acme%20corp/42")?;
+
+        let v: P = Deserialize::deserialize(PathDeserializer::new(&matched.params))?;
+        assert_eq!(
+            v,
+            P {
+                org: "acme corp".into(),
+                id: 42,
+            }
+        );
+
+        Ok(())
+    }
+
+    #[test]
+    fn invalid_utf8() -> anyhow::Result<()> {
+        let mut router = matchit::Router::new();
+        router.insert("/{name}", ())?;
+        let matched = router.at("/%ff")?;
+
+        let result: Result<String, _> =
+            Deserialize::deserialize(PathDeserializer::new(&matched.params));
+        assert!(result.is_err());
 
         Ok(())
     }
