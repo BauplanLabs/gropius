@@ -1,4 +1,4 @@
-error: arguments must be in order: Path, Query, Body, Request
+error: arguments must be in order: Path, Query, Body or MultipartBody, Request
   --> tests/ui/extractors_out_of_order.rs:25:24
    |
 25 |         path: gropius::Path<WidgetId>,

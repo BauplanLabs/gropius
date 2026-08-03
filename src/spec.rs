@@ -172,15 +172,36 @@ fn build_operation(
         parameters.extend(path_params(ep.path_params, schema_fn, generator)?);
     }
 
-    let request_body = if let Some(schema_fn) = ep.request_type {
-        let schema = resolve_schema(schema_fn, generator)?;
-        Some(ObjectOrReference::Object(RequestBody {
-            content: make_json_content(schema),
-            required: Some(true),
-            ..Default::default()
-        }))
-    } else {
-        None
+    let request_body = match ep.request_type {
+        Some(generated::RequestType::Json(schema_fn)) => {
+            let schema = resolve_schema(schema_fn, generator)?;
+            Some(ObjectOrReference::Object(RequestBody {
+                content: make_json_content(schema),
+                required: Some(true),
+                ..Default::default()
+            }))
+        }
+        Some(generated::RequestType::Multipart(schema_fn)) => {
+            let schema = schema_fn
+                .map(|f| resolve_schema(f, generator))
+                .transpose()?;
+
+            let mut content = Map::new();
+            content.insert(
+                "multipart/form-data".to_string(),
+                MediaType {
+                    schema,
+                    ..Default::default()
+                },
+            );
+
+            Some(ObjectOrReference::Object(RequestBody {
+                content,
+                required: Some(true),
+                ..Default::default()
+            }))
+        }
+        None => None,
     };
 
     let mut responses = Map::new();

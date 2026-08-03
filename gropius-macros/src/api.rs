@@ -99,6 +99,21 @@ enum ResponseKind {
     Raw,
 }
 
+/// The kind of request body an endpoint accepts.
+enum RequestKind {
+    Json(Box<Type>),
+    Multipart(Option<Box<Type>>),
+}
+
+impl RequestKind {
+    fn json_type(&self) -> Option<&Type> {
+        match self {
+            RequestKind::Json(ty) => Some(ty),
+            RequestKind::Multipart(_) => None,
+        }
+    }
+}
+
 /// Parsed endpoint method, with annotation.
 struct RawEndpoint {
     span: Span,
@@ -108,7 +123,7 @@ struct RawEndpoint {
     doc: Option<String>,
     path_type: Option<Type>,
     query_type: Option<Type>,
-    request_type: Option<Type>,
+    request_type: Option<RequestKind>,
     raw_request: bool,
     response_kind: ResponseKind,
     content_type: Option<syn::LitStr>,
@@ -158,7 +173,25 @@ pub(crate) fn expand(attr: TokenStream, mut item_trait: ItemTrait) -> TokenStrea
         let span = ep.span;
         let path_schema = schema_fn(ep.path_type.as_ref(), true, span);
         let query_schema = schema_fn(ep.query_type.as_ref(), true, span);
-        let request_schema = schema_fn(ep.request_type.as_ref(), true, span);
+        let request_schema = match &ep.request_type {
+            Some(RequestKind::Json(ty)) => quote_spanned! { span =>
+                Some(::gropius::generated::RequestType::Json(
+                    <#ty as ::gropius::generated::schemars::JsonSchema>::json_schema,
+                ))
+            },
+            Some(RequestKind::Multipart(schema_ty)) => {
+                let schema = match schema_ty {
+                    Some(ty) => quote_spanned! { span =>
+                        Some(<#ty as ::gropius::generated::schemars::JsonSchema>::json_schema)
+                    },
+                    None => quote! { None },
+                };
+                quote_spanned! { span =>
+                    Some(::gropius::generated::RequestType::Multipart(#schema))
+                }
+            }
+            None => quote! { None },
+        };
         let error_type = &ep.error_type;
 
         let response_schema = match &ep.response_kind {
@@ -227,15 +260,37 @@ pub(crate) fn expand(attr: TokenStream, mut item_trait: ItemTrait) -> TokenStrea
             args.push(quote! { query });
         }
 
-        if let Some(ty) = &ep.request_type {
-            extractions.push(quote_spanned! { span =>
-                let body = match ::gropius::Body::<#ty>::extract(_req) {
-                    Ok(v) => v,
-                    Err(e) => return ::std::boxed::Box::pin(::core::future::ready(Err(e))),
-                };
-            });
+        match &ep.request_type {
+            Some(RequestKind::Json(ty)) => {
+                extractions.push(quote_spanned! { span =>
+                    let body = match ::gropius::Body::<#ty>::extract(_req) {
+                        Ok(v) => v,
+                        Err(e) => return ::std::boxed::Box::pin(::core::future::ready(Err(e))),
+                    };
+                });
 
-            args.push(quote! { body });
+                args.push(quote! { body });
+            }
+            Some(RequestKind::Multipart(_)) => {
+                extractions.push(quote_spanned! { span =>
+                    let __content_type = _req
+                        .headers()
+                        .get(::gropius::generated::http::header::CONTENT_TYPE)
+                        .cloned();
+                    let body = match ::gropius::generated::read_multipart(
+                        __content_type,
+                        _req.body().clone(),
+                    ) {
+                        Ok(v) => v,
+                        Err(e) => {
+                            return ::std::boxed::Box::pin(::core::future::ready(Err(e)));
+                        }
+                    };
+                });
+
+                args.push(quote! { body });
+            }
+            None => (),
         }
 
         if ep.raw_request {
@@ -331,12 +386,23 @@ pub(crate) fn expand(attr: TokenStream, mut item_trait: ItemTrait) -> TokenStrea
     let assertion_tokens = endpoints.iter().map(|ep| {
         let mut checks = Vec::new();
 
-        for ty in [&ep.path_type, &ep.query_type, &ep.request_type]
-            .into_iter()
-            .flatten()
+        for ty in [
+            ep.path_type.as_ref(),
+            ep.query_type.as_ref(),
+            ep.request_type.as_ref().and_then(RequestKind::json_type),
+        ]
+        .into_iter()
+        .flatten()
         {
             checks.push(quote_spanned! { ty.span() => {
                 fn check<T: ::gropius::generated::serde::de::DeserializeOwned + ::gropius::generated::schemars::JsonSchema>() {}
+                check::<#ty>();
+            }});
+        }
+
+        if let Some(RequestKind::Multipart(Some(ty))) = &ep.request_type {
+            checks.push(quote_spanned! { ty.span() => {
+                fn check<T: ::gropius::generated::schemars::JsonSchema>() {}
                 check::<#ty>();
             }});
         }
@@ -434,8 +500,8 @@ fn parse_endpoint(method: &mut TraitItemFn) -> Result<RawEndpoint, Diagnostic> {
         } else {
             input.span()
         };
-        let out_of_order =
-            extractor_span.error("arguments must be in order: Path, Query, Body, Request");
+        let out_of_order = extractor_span
+            .error("arguments must be in order: Path, Query, Body or MultipartBody, Request");
 
         if let Some(inner) = parse_extractor(ty, "Path") {
             if query_type.is_some() || request_type.is_some() || raw_request {
@@ -453,8 +519,24 @@ fn parse_endpoint(method: &mut TraitItemFn) -> Result<RawEndpoint, Diagnostic> {
             if raw_request {
                 return Err(out_of_order);
             }
+            if request_type.is_some() {
+                return Err(extractor_span.error("at most one Body or MultipartBody is allowed"));
+            }
 
-            request_type = Some(inner);
+            request_type = Some(RequestKind::Json(Box::new(inner)));
+        } else if let Type::Path(p) = ty.deref()
+            && let Some(last) = p.path.segments.last()
+            && last.ident == "MultipartBody"
+        {
+            if raw_request {
+                return Err(out_of_order);
+            }
+            if request_type.is_some() {
+                return Err(extractor_span.error("at most one Body or MultipartBody is allowed"));
+            }
+
+            let schema_ty = parse_extractor(ty, "MultipartBody").map(Box::new);
+            request_type = Some(RequestKind::Multipart(schema_ty));
         } else if let Type::Path(p) = ty.deref()
             && let Some(last) = p.path.segments.last()
             && last.ident == "Request"
@@ -463,7 +545,7 @@ fn parse_endpoint(method: &mut TraitItemFn) -> Result<RawEndpoint, Diagnostic> {
         } else {
             return Err(ty
                 .span()
-                .error("expected Path<T>, Query<T>, Body<T>, or Request"));
+                .error("expected Path<T>, Query<T>, Body<T>, MultipartBody, or Request"));
         }
     }
 

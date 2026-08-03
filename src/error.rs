@@ -43,6 +43,17 @@ pub enum RouterError {
     /// the client hangs up early.
     #[error("failed to read request body")]
     ReadBody,
+    /// The request's content-type is missing or not valid for a multipart
+    /// endpoint.
+    #[error("missing or invalid multipart content-type")]
+    InvalidMultipartContentType,
+    /// Failed to parse a multipart request body.
+    #[error("invalid multipart body")]
+    InvalidMultipart {
+        /// The underlying multipart error.
+        #[source]
+        source: multer::Error,
+    },
     /// Failed to deserialize the request body.
     #[error("invalid request body")]
     InvalidBody {
@@ -66,6 +77,8 @@ impl RouterError {
             Self::InvalidPath { .. } => http::StatusCode::NOT_FOUND,
             Self::InvalidQueryString { .. } => http::StatusCode::BAD_REQUEST,
             Self::ReadBody => http::StatusCode::BAD_REQUEST,
+            Self::InvalidMultipartContentType => http::StatusCode::UNSUPPORTED_MEDIA_TYPE,
+            Self::InvalidMultipart { .. } => http::StatusCode::BAD_REQUEST,
             Self::InvalidBody { .. } => http::StatusCode::BAD_REQUEST,
             Self::ResponseSerialization(_) => http::StatusCode::INTERNAL_SERVER_ERROR,
         }

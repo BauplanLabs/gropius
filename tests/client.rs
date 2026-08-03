@@ -4,8 +4,9 @@ use std::convert::Infallible;
 use std::net::SocketAddr;
 use std::sync::OnceLock;
 
-use gropius::client::ClientError;
-use gropius::{Body, EmptyResponse, Path, Query, Response};
+use bytes::Bytes;
+use gropius::client::{ClientError, MultipartPart};
+use gropius::{Body, EmptyResponse, MultipartBody, Path, Query, Response};
 use hyper::server::conn::http1;
 use hyper_util::{rt::TokioIo, service::TowerToHyperService};
 use schemars::JsonSchema;
@@ -48,6 +49,11 @@ struct Echo {
     text: String,
 }
 
+#[derive(Serialize, Deserialize, JsonSchema)]
+struct UploadSpec {
+    name: String,
+}
+
 // The API under test. Its handlers back both clients, and it generates the
 // async client.
 #[gropius::api(client(async, cfg(feature = "client-reqwest")))]
@@ -73,6 +79,9 @@ trait WidgetApi {
 
     #[endpoint(POST, "/widgets")]
     async fn create_widget(&self, body: Body<CreateWidget>) -> Result<Widget, WidgetError>;
+
+    #[endpoint(POST, "/uploads")]
+    async fn upload(&self, body: MultipartBody) -> Result<Widget, WidgetError>;
 
     #[endpoint(DELETE, "/widgets/{id}")]
     async fn delete_widget(&self, path: Path<u64>) -> Result<EmptyResponse, WidgetError>;
@@ -111,6 +120,9 @@ trait BlockingWidgetApi {
 
     #[endpoint(POST, "/widgets")]
     async fn create_widget(&self, body: Body<CreateWidget>) -> Result<Widget, WidgetError>;
+
+    #[endpoint(POST, "/uploads")]
+    async fn upload(&self, body: MultipartBody) -> Result<Widget, WidgetError>;
 
     #[endpoint(DELETE, "/widgets/{id}")]
     async fn delete_widget(&self, path: Path<u64>) -> Result<EmptyResponse, WidgetError>;
@@ -189,6 +201,34 @@ impl WidgetApi for Server {
         Ok(Widget {
             id: 42,
             name: body.name.clone(),
+        })
+    }
+
+    async fn upload(&self, mut body: MultipartBody) -> Result<Widget, WidgetError> {
+        let mut name = None;
+        let mut size = 0;
+        while let Some(field) = body.next_field().await.map_err(|_| WidgetError::NotFound)? {
+            match field.name() {
+                Some("spec") => {
+                    let bytes = field.bytes().await.map_err(|_| WidgetError::NotFound)?;
+                    let spec: UploadSpec =
+                        serde_json::from_slice(&bytes).map_err(|_| WidgetError::NotFound)?;
+                    name = Some(spec.name);
+                }
+                Some("file") => {
+                    size = field
+                        .bytes()
+                        .await
+                        .map_err(|_| WidgetError::NotFound)?
+                        .len();
+                }
+                _ => (),
+            }
+        }
+
+        Ok(Widget {
+            id: size as u64,
+            name: name.ok_or(WidgetError::NotFound)?,
         })
     }
 
@@ -302,6 +342,29 @@ async fn async_client() -> anyhow::Result<()> {
     assert_eq!(created.id, 42);
     assert_eq!(created.name, "cog");
 
+    // Multipart request body.
+    let uploaded = client
+        .upload(
+            "gropius-test-boundary",
+            [
+                MultipartPart {
+                    name: "spec".into(),
+                    content_type: Some("application/json".into()),
+                    filename: None,
+                    contents: Bytes::from_static(br#"{"name": "zip"}"#),
+                },
+                MultipartPart {
+                    name: "file".into(),
+                    content_type: None,
+                    filename: Some("f.zip".into()),
+                    contents: Bytes::from_static(b"\x01\x02\x03"),
+                },
+            ],
+        )
+        .await?;
+    assert_eq!(uploaded.id, 3);
+    assert_eq!(uploaded.name, "zip");
+
     // Empty response deserializes to the unit type.
     let () = client.delete_widget(1).await?;
 
@@ -322,8 +385,67 @@ async fn async_client() -> anyhow::Result<()> {
 }
 
 #[test]
+fn multipart_encoding() {
+    let (content_type, body) = gropius::generated::client::encode_multipart(
+        "b0",
+        [
+            MultipartPart {
+                name: "spec".into(),
+                content_type: Some("application/json".into()),
+                filename: None,
+                contents: Bytes::from_static(b"{}"),
+            },
+            MultipartPart {
+                name: "file".into(),
+                content_type: None,
+                filename: Some("f.zip".into()),
+                contents: Bytes::from_static(b"\x01\x02"),
+            },
+        ],
+    );
+
+    assert_eq!(content_type, "multipart/form-data; boundary=b0");
+    assert_eq!(
+        &body[..],
+        concat!(
+            "--b0\r\n",
+            "Content-Disposition: form-data; name=\"spec\"\r\n",
+            "Content-Type: application/json\r\n",
+            "\r\n",
+            "{}\r\n",
+            "--b0\r\n",
+            "Content-Disposition: form-data; name=\"file\"; filename=\"f.zip\"\r\n",
+            "\r\n",
+            "\x01\x02\r\n",
+            "--b0--\r\n",
+        )
+        .as_bytes()
+    );
+}
+
+#[test]
 fn blocking_client() -> anyhow::Result<()> {
     let client = BlockingWidgetApiClient::new(server_url());
+
+    // Multipart request body.
+    let uploaded = client.upload(
+        "gropius-test-boundary",
+        [
+            MultipartPart {
+                name: "spec".into(),
+                content_type: Some("application/json".into()),
+                filename: None,
+                contents: Bytes::from_static(br#"{"name": "zip"}"#),
+            },
+            MultipartPart {
+                name: "file".into(),
+                content_type: None,
+                filename: Some("f.zip".into()),
+                contents: Bytes::from_static(b"\x01\x02\x03"),
+            },
+        ],
+    )?;
+    assert_eq!(uploaded.id, 3);
 
     // Path parameters: scalar, tuple, struct, and a keyword-named segment.
     assert_eq!(client.get_widget(1)?.name, "sprocket");
