@@ -1,0 +1,79 @@
+---
+source: tests/multipart.rs
+expression: spec
+---
+openapi: 3.1.0
+info:
+  title: WidgetApi
+  version: 0.1.0
+paths:
+  /widgets:
+    post:
+      tags:
+        - widgets
+      description: Create a widget from a spec and its contents.
+      operationId: create_widget
+      requestBody:
+        content:
+          multipart/form-data:
+            schema:
+              properties:
+                spec:
+                  $ref: "#/components/schemas/WidgetSpec"
+                file:
+                  $ref: "#/components/schemas/Binary"
+              type: object
+              required:
+                - spec
+                - file
+        required: true
+      responses:
+        "200":
+          description: successful operation
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Widget"
+        default:
+          description: error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+components:
+  schemas:
+    WidgetSpec:
+      properties:
+        name:
+          type: string
+        fidgets:
+          type: boolean
+      type: object
+      required:
+        - name
+        - fidgets
+    Binary:
+      type: string
+      format: binary
+    Widget:
+      properties:
+        name:
+          type: string
+        size:
+          type: integer
+          minimum: 0
+          format: uint
+      type: object
+      required:
+        - name
+        - size
+    ApiError:
+      properties:
+        message:
+          type: string
+      type: object
+      required:
+        - message
+tags:
+  - name: widgets
+    description: The widget API.

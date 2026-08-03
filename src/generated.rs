@@ -20,8 +20,8 @@ use crate::RouterError;
 type BoxFuture<T> = Pin<Box<dyn Future<Output = T> + Send>>;
 
 /// A type-erased handler closure. Takes the request and matched path
-/// parameters by reference, extracts what it needs synchronously, and
-/// returns an owned future.
+/// parameters by reference, extracts what it needs, and returns an owned
+/// future. Multipart bodies are parsed lazily, by the handler.
 pub type Handler = Arc<
     dyn Fn(
             &http::Request<Bytes>,
@@ -33,6 +33,16 @@ pub type Handler = Arc<
 
 /// A function pointer to `<T as JsonSchema>::json_schema`) for a type.
 pub type SchemaFn = fn(&mut SchemaGenerator) -> Schema;
+
+/// Describes how the request body is parsed.
+#[derive(Debug, Copy, Clone)]
+pub enum RequestType {
+    /// A JSON body with a schema.
+    Json(SchemaFn),
+    /// A `multipart/form-data` body. The schema, if present, comes from the
+    /// endpoint's `request_schema_with` function.
+    Multipart(Option<SchemaFn>),
+}
 
 /// Describes how a success response is produced.
 #[derive(Debug, Copy, Clone)]
@@ -102,12 +112,35 @@ pub struct Endpoint {
     pub query_type: Option<SchemaFn>,
     /// Schema of the `Path<T>` extractor's inner type.
     pub path_type: Option<SchemaFn>,
-    /// Schema of the request body.
-    pub request_type: Option<SchemaFn>,
+    /// The request body type.
+    pub request_type: Option<RequestType>,
     /// The kind of success response.
     pub response_type: ResponseType,
     /// Schema of the error response body. `None` for infallible endpoints.
     pub error_type: Option<SchemaFn>,
+}
+
+/// Parse a request body as multipart, reading the boundary from the
+/// content-type header.
+pub fn read_multipart<S>(
+    content_type: Option<http::HeaderValue>,
+    body: Bytes,
+) -> Result<crate::MultipartBody<S>, RouterError> {
+    let Some(content_type) = content_type.as_ref().and_then(|v| v.to_str().ok()) else {
+        return Err(RouterError::InvalidMultipartContentType);
+    };
+
+    let boundary = multer::parse_boundary(content_type)
+        .map_err(|_| RouterError::InvalidMultipartContentType)?;
+
+    // TODO: support streaming multipart bodies.
+    let stream =
+        futures_util::stream::once(async move { Ok::<Bytes, std::convert::Infallible>(body) });
+
+    Ok(crate::MultipartBody {
+        inner: multer::Multipart::new(stream, boundary),
+        _schema: std::marker::PhantomData,
+    })
 }
 
 /// Construct a response for an http handler.

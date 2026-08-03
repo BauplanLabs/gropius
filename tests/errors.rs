@@ -147,6 +147,8 @@ fn error_handler(err: gropius::RouterError) -> http::Response<bytes::Bytes> {
         gropius::RouterError::InvalidPath { .. } => "BAD_REQUEST",
         gropius::RouterError::InvalidQueryString { .. } => "BAD_REQUEST",
         gropius::RouterError::ReadBody => "BAD_REQUEST",
+        gropius::RouterError::InvalidMultipartContentType => "UNSUPPORTED_MEDIA_TYPE",
+        gropius::RouterError::InvalidMultipart { .. } => "BAD_REQUEST",
         gropius::RouterError::InvalidBody { .. } => "BAD_REQUEST",
         gropius::RouterError::ResponseSerialization(_) => "INTERNAL_ERROR",
     };

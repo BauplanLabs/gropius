@@ -2,7 +2,7 @@ use proc_macro2::TokenStream;
 use quote::{format_ident, quote, quote_spanned};
 use syn::spanned::Spanned;
 
-use crate::api::{RawEndpoint, ResponseKind, path};
+use crate::api::{RawEndpoint, RequestKind, ResponseKind, path};
 
 /// Arguments to `client(async, cfg(...))`.
 #[derive(Default)]
@@ -137,8 +137,19 @@ fn client_method(ep: &RawEndpoint, vis: &syn::Visibility, is_async: bool) -> Tok
     if let Some(ty) = &ep.query_type {
         params.push(quote! { query: #ty });
     }
-    if let Some(ty) = &ep.request_type {
-        params.push(quote! { body: #ty });
+    match &ep.request_type {
+        Some(RequestKind::Json(ty)) => {
+            params.push(quote! { body: #ty });
+        }
+        Some(RequestKind::Multipart(_)) => {
+            params.push(quote! { boundary: &str });
+            params.push(quote! {
+                parts: impl ::core::iter::IntoIterator<
+                    Item = ::gropius::generated::client::MultipartPart,
+                >
+            });
+        }
+        None => (),
     }
 
     let base_uri = if ep.path_type.is_some() {
@@ -185,10 +196,19 @@ fn client_method(ep: &RawEndpoint, vis: &syn::Visibility, is_async: bool) -> Tok
         quote! { let __uri = #base_uri; }
     };
 
-    let body_expr = if ep.request_type.is_some() {
-        quote! { ::core::option::Option::Some(::gropius::generated::client::encode_body(&body)?) }
-    } else {
-        quote! { ::core::option::Option::None }
+    let body_expr = match &ep.request_type {
+        Some(RequestKind::Json(_)) => quote! {
+            ::core::option::Option::Some((
+                ::std::string::String::from("application/json"),
+                ::gropius::generated::client::encode_body(&body)?,
+            ))
+        },
+        Some(RequestKind::Multipart(_)) => quote! {
+            ::core::option::Option::Some(::gropius::generated::client::encode_multipart(
+                boundary, parts,
+            ))
+        },
+        None => quote! { ::core::option::Option::None },
     };
 
     let (ok_type, parse_fn) = match &ep.response_kind {
@@ -260,9 +280,13 @@ fn client_method(ep: &RawEndpoint, vis: &syn::Visibility, is_async: bool) -> Tok
 fn client_assertions(ep: &RawEndpoint) -> TokenStream {
     let mut checks = Vec::new();
 
-    for ty in [&ep.path_type, &ep.query_type, &ep.request_type]
-        .into_iter()
-        .flatten()
+    for ty in [
+        ep.path_type.as_ref(),
+        ep.query_type.as_ref(),
+        ep.request_type.as_ref().and_then(RequestKind::json_type),
+    ]
+    .into_iter()
+    .flatten()
     {
         checks.push(quote_spanned! { ty.span() => {
             fn check<T: ::gropius::generated::serde::Serialize>() {}

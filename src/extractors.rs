@@ -1,5 +1,6 @@
 use std::{fmt, ops::Deref};
 
+use bytes::Bytes;
 use schemars::JsonSchema;
 use serde::de::DeserializeOwned;
 
@@ -246,5 +247,119 @@ impl<T: DeserializeOwned + JsonSchema + fmt::Debug> fmt::Debug for Body<T> {
 impl<T: DeserializeOwned + JsonSchema + fmt::Display> fmt::Display for Body<T> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         self.inner.fmt(f)
+    }
+}
+
+/// Extracts a `multipart/form-data` body as a sequence of fields.
+///
+/// The optional type parameter documents the body in the OpenAPI
+/// specification, using a type deriving [`JsonSchema`]; [`Binary`] marks the
+/// file parts:
+///
+/// ```
+/// # use schemars::JsonSchema;
+/// # use serde::Serialize;
+/// # #[derive(Serialize, JsonSchema)] struct MyError;
+/// # impl gropius::ApiError for MyError {
+/// #     fn status_code(&self) -> http::StatusCode { http::StatusCode::INTERNAL_SERVER_ERROR }
+/// # }
+/// #[derive(JsonSchema)]
+/// struct CreateWidgetBody {
+///     name: String,
+///     file: gropius::Binary,
+/// }
+///
+/// #[gropius::api]
+/// trait WidgetApi {
+///     #[endpoint(POST, "/widgets")]
+///     async fn create_widget(
+///         &self,
+///         body: gropius::MultipartBody<CreateWidgetBody>,
+///     ) -> Result<(), MyError>;
+/// }
+///
+/// # #[derive(Clone)] struct Server;
+/// impl WidgetApi for Server {
+///     async fn create_widget(
+///         &self,
+///         mut body: gropius::MultipartBody<CreateWidgetBody>,
+///     ) -> Result<(), MyError> {
+///         while let Some(field) = body.next_field().await.unwrap() {
+///             let name = field.name().map(str::to_owned);
+///             let contents = field.bytes().await.unwrap();
+///             // ...
+///         }
+///         Ok(())
+///     }
+/// }
+/// ```
+pub struct MultipartBody<S = ()> {
+    pub(crate) inner: multer::Multipart<'static>,
+    pub(crate) _schema: std::marker::PhantomData<S>,
+}
+
+impl<S> MultipartBody<S> {
+    /// Return the next field in the body, or `None` when there are no more.
+    pub async fn next_field(&mut self) -> Result<Option<Field>, RouterError> {
+        let field = self
+            .inner
+            .next_field()
+            .await
+            .map_err(|source| RouterError::InvalidMultipart { source })?;
+
+        Ok(field.map(Field))
+    }
+}
+
+impl<S> fmt::Debug for MultipartBody<S> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("MultipartBody").finish()
+    }
+}
+
+/// A schema-only marker for the binary file parts of a [`MultipartBody`].
+/// Documented as a binary string in the OpenAPI specification.
+#[derive(Debug, Clone, Copy)]
+pub struct Binary;
+
+impl JsonSchema for Binary {
+    fn schema_name() -> std::borrow::Cow<'static, str> {
+        "Binary".into()
+    }
+
+    fn json_schema(_generator: &mut schemars::SchemaGenerator) -> schemars::Schema {
+        schemars::json_schema!({
+            "type": "string",
+            "format": "binary",
+        })
+    }
+}
+
+/// A single field of a [`MultipartBody`].
+pub struct Field(multer::Field<'static>);
+
+impl Field {
+    /// The name of the field, from the `Content-Disposition` header.
+    pub fn name(&self) -> Option<&str> {
+        self.0.name()
+    }
+
+    /// The content-type of the field, if one was set.
+    pub fn content_type(&self) -> Option<&str> {
+        self.0.content_type().map(|m| m.as_ref())
+    }
+
+    /// Read the full contents of the field.
+    pub async fn bytes(self) -> Result<Bytes, RouterError> {
+        self.0
+            .bytes()
+            .await
+            .map_err(|source| RouterError::InvalidMultipart { source })
+    }
+}
+
+impl fmt::Debug for Field {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("Field").finish()
     }
 }

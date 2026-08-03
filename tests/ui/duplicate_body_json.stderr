@@ -1,0 +1,5 @@
+error: at most one Body or MultipartBody is allowed
+  --> tests/ui/duplicate_body_json.rs:25:16
+   |
+25 |         extra: Body<WidgetSpec>,
+   |                ^^^^

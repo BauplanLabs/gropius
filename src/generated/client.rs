@@ -108,6 +108,56 @@ pub fn encode_body<T: Serialize>(body: &T) -> Result<Bytes, RequestError> {
     Ok(Bytes::from(bytes))
 }
 
+/// A single part of a `multipart/form-data` request body.
+#[derive(Debug, Clone)]
+pub struct MultipartPart {
+    /// The name of the part.
+    pub name: String,
+    /// The content-type of the part, if any.
+    pub content_type: Option<String>,
+    /// The filename of the part, if any.
+    pub filename: Option<String>,
+    /// The contents of the part.
+    pub contents: Bytes,
+}
+
+/// Encode a `multipart/form-data` body. Returns the content-type header,
+/// including the boundary, and the encoded body.
+pub fn encode_multipart(
+    boundary: &str,
+    parts: impl IntoIterator<Item = MultipartPart>,
+) -> (String, Bytes) {
+    let mut body = Vec::new();
+    for part in parts {
+        body.extend_from_slice(format!("--{boundary}\r\n").as_bytes());
+
+        body.extend_from_slice(b"Content-Disposition: form-data; name=\"");
+        body.extend_from_slice(part.name.as_bytes());
+        body.extend_from_slice(b"\"");
+        if let Some(filename) = &part.filename {
+            body.extend_from_slice(b"; filename=\"");
+            body.extend_from_slice(filename.as_bytes());
+            body.extend_from_slice(b"\"");
+        }
+        body.extend_from_slice(b"\r\n");
+
+        if let Some(content_type) = &part.content_type {
+            body.extend_from_slice(b"Content-Type: ");
+            body.extend_from_slice(content_type.as_bytes());
+            body.extend_from_slice(b"\r\n");
+        }
+
+        body.extend_from_slice(b"\r\n");
+        body.extend_from_slice(&part.contents);
+        body.extend_from_slice(b"\r\n");
+    }
+
+    body.extend_from_slice(format!("--{boundary}--\r\n").as_bytes());
+
+    let content_type = format!("multipart/form-data; boundary={boundary}");
+    (content_type, Bytes::from(body))
+}
+
 /// Parse a JSON response body, or an error body on a non-success status.
 pub fn parse_json<T, E>(
     resp: Response,
@@ -202,14 +252,14 @@ mod reqwest_impl {
             &self,
             method: http::Method,
             path: &str,
-            body: Option<Bytes>,
+            body: Option<(String, Bytes)>,
         ) -> Result<Response, TransportError> {
             let mut req = self
                 .http
                 .request(method, format!("{}{path}", self.base_url));
-            if let Some(body) = body {
+            if let Some((content_type, body)) = body {
                 req = req
-                    .header(http::header::CONTENT_TYPE, "application/json")
+                    .header(http::header::CONTENT_TYPE, content_type)
                     .body(body);
             }
 
@@ -247,14 +297,14 @@ mod reqwest_impl {
             &self,
             method: http::Method,
             path: &str,
-            body: Option<Bytes>,
+            body: Option<(String, Bytes)>,
         ) -> Result<Response, TransportError> {
             let mut req = self
                 .http
                 .request(method, format!("{}{path}", self.base_url));
-            if let Some(body) = body {
+            if let Some((content_type, body)) = body {
                 req = req
-                    .header(http::header::CONTENT_TYPE, "application/json")
+                    .header(http::header::CONTENT_TYPE, content_type)
                     .body(body);
             }
 
@@ -305,16 +355,18 @@ mod ureq_impl {
             &self,
             method: http::Method,
             path: &str,
-            body: Option<Bytes>,
+            body: Option<(String, Bytes)>,
         ) -> Result<Response, TransportError> {
             let mut req = http::Request::builder()
                 .method(method)
                 .uri(format!("{}{path}", self.base_url));
-            if body.is_some() {
-                req = req.header(http::header::CONTENT_TYPE, "application/json");
-            }
-
-            let body = body.map(|b| b.to_vec()).unwrap_or_default();
+            let body = match body {
+                Some((content_type, body)) => {
+                    req = req.header(http::header::CONTENT_TYPE, content_type);
+                    body.to_vec()
+                }
+                None => Vec::new(),
+            };
             let req = req.body(body)?;
 
             let resp = self.agent.run(req)?;

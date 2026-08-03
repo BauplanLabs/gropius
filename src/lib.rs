@@ -49,9 +49,9 @@
 //! ### Endpoint request types
 //!
 //! An endpoint can accept any combination of optional "extractors": [`Path`],
-//! [`Query`], [`Body`], and [`Request`], in that order. The former three parse
-//! the request, while the latter gives you the raw request from which you can
-//! read headers, parse the body yourself, etc.
+//! [`Query`], [`Body`] or [`MultipartBody`], and [`Request`], in that order. All
+//! but the latter parse the request, while [`Request`] gives you the raw
+//! request from which you can read headers, parse the body yourself, etc.
 //!
 //! The inner types of the extractors must implement
 //! [`serde::de::DeserializeOwned`] and [`schemars::JsonSchema`]:
@@ -91,6 +91,40 @@
 //!         body: Body<WidgetUpdate>,
 //!         req: Request,
 //!     ) -> Result<WidgetUpdate, Error>;
+//! }
+//! ```
+//!
+//! ### Multipart request bodies
+//!
+//! An endpoint can accept a `multipart/form-data` body with [`MultipartBody`],
+//! which hands the handler the parts one at a time. The framework doesn't
+//! impose a shape on the body; the optional type parameter documents it in
+//! the OpenAPI specification, with [`Binary`] marking the file parts:
+//!
+//! ```rust
+//! # use gropius::{ApiError, Binary, MultipartBody};
+//! # use schemars::JsonSchema;
+//! # use serde::Serialize;
+//! # #[derive(Serialize, JsonSchema)]
+//! # struct Error;
+//! # impl ApiError for Error {
+//! #     fn status_code(&self) -> http::StatusCode { http::StatusCode::INTERNAL_SERVER_ERROR }
+//! # }
+//! #
+//! #[derive(JsonSchema)]
+//! struct UploadImageBody {
+//!     name: String,
+//!     file: Binary,
+//! }
+//!
+//! #[gropius::api]
+//! trait ImageApi {
+//!     /// Upload an image.
+//!     #[endpoint(POST, "/v1/images")]
+//!     async fn upload_image(
+//!         &self,
+//!         body: MultipartBody<UploadImageBody>,
+//!     ) -> Result<(), Error>;
 //! }
 //! ```
 //!
@@ -436,7 +470,7 @@ pub use spec::{SpecError, Specification};
 /// [crate-level documentation](crate#generating-a-client) for more information.
 #[cfg(any(feature = "client-reqwest", feature = "client-ureq"))]
 pub mod client {
-    pub use crate::generated::client::{ClientError, RequestError, TransportError};
+    pub use crate::generated::client::{ClientError, MultipartPart, RequestError, TransportError};
 }
 
 use bytes::Bytes;
