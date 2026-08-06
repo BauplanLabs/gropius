@@ -103,7 +103,7 @@ pub(super) fn generate_client(
             /// have `http_status_as_error(false)` set in its config, or all
             /// errors will be [`TransportError`](crate::client::ClientError):
             ///
-            /// ```rust
+            /// ```ignore
             ///  let transport: ureq::Agent = ureq::Agent::config_builder()
             ///    .http_status_as_error(false)
             ///    .build()
