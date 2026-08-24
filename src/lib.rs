@@ -460,7 +460,7 @@ compile_error!("the `client-reqwest` and `client-ureq` features are mutually exc
 #[doc(hidden)]
 pub mod generated;
 
-pub use error::{ApiError, ErrorHandler, RouterError, default_error_handler};
+pub use error::{ApiError, ErrorCause, ErrorHandler, RouterError, default_error_handler};
 pub use extractors::*;
 pub use gropius_macros::{ApiError, api};
 pub use router::*;

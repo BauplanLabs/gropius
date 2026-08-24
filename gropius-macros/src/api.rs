@@ -320,7 +320,11 @@ pub(crate) fn expand(attr: TokenStream, mut item_trait: ItemTrait) -> TokenStrea
             quote! {
                 Err(e) => {
                     let status = ::gropius::ApiError::status_code(&e);
-                    ::gropius::generated::make_json_response(&e, status)
+                    let mut resp = ::gropius::generated::make_json_response(&e, status)?;
+                    if let Some(cause) = ::gropius::ApiError::into_cause(e) {
+                        resp.extensions_mut().insert(::gropius::ErrorCause(cause.into()));
+                    }
+                    Ok(resp)
                 }
             }
         };

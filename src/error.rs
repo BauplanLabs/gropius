@@ -7,7 +7,20 @@ use serde::Serialize;
 pub trait ApiError: Serialize + JsonSchema {
     /// The status code of the error.
     fn status_code(&self) -> http::StatusCode;
+
+    /// The underlying cause, delivered to middleware as [`ErrorCause`] in
+    /// the response extensions.
+    fn into_cause(self) -> Option<Box<dyn std::error::Error + Send + Sync>>
+    where
+        Self: Sized,
+    {
+        None
+    }
 }
+
+/// The cause of an error response, for middleware to log or record.
+#[derive(Debug, Clone)]
+pub struct ErrorCause(pub std::sync::Arc<dyn std::error::Error + Send + Sync>);
 
 /// An error that can occur while handling a request.
 #[derive(Debug, thiserror::Error)]

@@ -6,6 +6,7 @@ use syn::{Attribute, Data, DeriveInput, Fields};
 
 pub(crate) fn expand(input: DeriveInput) -> TokenStream {
     let mut errors: Vec<Diagnostic> = Vec::new();
+    let mut cause_body = None;
 
     let body = match &input.data {
         Data::Struct(_) => match parse_status(&input.attrs) {
@@ -68,9 +69,14 @@ pub(crate) fn expand(input: DeriveInput) -> TokenStream {
                     let ident = &variant.ident;
                     match status {
                         Status::Transparent(span) => match &variant.fields {
-                            Fields::Unnamed(fields) if fields.unnamed.len() == 1 => Some(quote! {
-                                Self::#ident(inner) => ::gropius::ApiError::status_code(inner)
-                            }),
+                            Fields::Unnamed(fields) if fields.unnamed.len() == 1 => Some((
+                                quote! {
+                                    Self::#ident(inner) => ::gropius::ApiError::status_code(inner)
+                                },
+                                quote! {
+                                    Self::#ident(inner) => ::gropius::ApiError::into_cause(inner)
+                                },
+                            )),
                             _ => {
                                 errors.push(span.error(
                                     "`#[api_error(transparent)]` requires a newtype variant",
@@ -86,12 +92,14 @@ pub(crate) fn expand(input: DeriveInput) -> TokenStream {
                             };
 
                             let status = status_expr(&fixed);
-                            Some(quote! { #pattern => #status })
+                            Some((quote! { #pattern => #status }, quote! { #pattern => None }))
                         }
                     }
                 });
 
-            quote! { match self { #(#arms,)* } }
+            let (status_arms, cause_arms): (Vec<_>, Vec<_>) = arms.unzip();
+            cause_body = Some(quote! { match self { #(#cause_arms,)* } });
+            quote! { match self { #(#status_arms,)* } }
         }
         Data::Union(_) => {
             errors.push(
@@ -126,11 +134,25 @@ pub(crate) fn expand(input: DeriveInput) -> TokenStream {
     }
     let (impl_generics, _, where_clause) = generics.split_for_impl();
 
+    let into_cause = cause_body.map(|body| {
+        quote! {
+            fn into_cause(
+                self,
+            ) -> ::std::option::Option<
+                ::std::boxed::Box<dyn ::std::error::Error + ::std::marker::Send + ::std::marker::Sync>,
+            > {
+                #body
+            }
+        }
+    });
+
     quote! {
         impl #impl_generics ::gropius::ApiError for #name #ty_generics #where_clause {
             fn status_code(&self) -> ::gropius::generated::http::StatusCode {
                 #body
             }
+
+            #into_cause
         }
     }
 }
