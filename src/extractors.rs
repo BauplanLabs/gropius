@@ -80,7 +80,8 @@ use crate::{Request, RouterError, path};
 /// }
 /// ```
 pub struct Path<T: DeserializeOwned + JsonSchema> {
-    inner: T,
+    /// The deserialized path parameters.
+    pub inner: T,
 }
 
 impl<T: DeserializeOwned + JsonSchema> Path<T> {
@@ -142,7 +143,8 @@ impl<T: DeserializeOwned + JsonSchema + fmt::Display> fmt::Display for Path<T> {
 /// }
 /// ```
 pub struct Query<T: DeserializeOwned + JsonSchema> {
-    inner: T,
+    /// The deserialized query parameters.
+    pub inner: T,
 }
 
 impl<T: DeserializeOwned + JsonSchema> Query<T> {
@@ -210,7 +212,8 @@ impl<T: DeserializeOwned + JsonSchema + fmt::Display> fmt::Display for Query<T> 
 /// }
 /// ```
 pub struct Body<T: DeserializeOwned + JsonSchema> {
-    inner: T,
+    /// The deserialized body.
+    pub inner: T,
 }
 
 impl<T: DeserializeOwned + JsonSchema> Body<T> {
