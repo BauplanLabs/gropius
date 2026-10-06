@@ -52,6 +52,7 @@
 //! [`Query`], [`Body`] or [`MultipartBody`], and [`Request`], in that order. All
 //! but the latter parse the request, while [`Request`] gives you the raw
 //! request from which you can read headers, parse the body yourself, etc.
+//! `Body` may additionally be wrapped in `Option`, as in `Option<Body<T>>`.
 //!
 //! The inner types of the extractors must implement
 //! [`serde::de::DeserializeOwned`] and [`schemars::JsonSchema`]:

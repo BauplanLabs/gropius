@@ -80,6 +80,13 @@ trait WidgetApi {
     #[endpoint(POST, "/widgets")]
     async fn create_widget(&self, body: Body<CreateWidget>) -> Result<Widget, WidgetError>;
 
+    #[endpoint(PATCH, "/widgets/{id}")]
+    async fn rename_widget(
+        &self,
+        path: Path<u64>,
+        body: Option<Body<CreateWidget>>,
+    ) -> Result<Widget, WidgetError>;
+
     #[endpoint(POST, "/uploads")]
     async fn upload(&self, body: MultipartBody) -> Result<Widget, WidgetError>;
 
@@ -120,6 +127,13 @@ trait BlockingWidgetApi {
 
     #[endpoint(POST, "/widgets")]
     async fn create_widget(&self, body: Body<CreateWidget>) -> Result<Widget, WidgetError>;
+
+    #[endpoint(PATCH, "/widgets/{id}")]
+    async fn rename_widget(
+        &self,
+        path: Path<u64>,
+        body: Option<Body<CreateWidget>>,
+    ) -> Result<Widget, WidgetError>;
 
     #[endpoint(POST, "/uploads")]
     async fn upload(&self, body: MultipartBody) -> Result<Widget, WidgetError>;
@@ -201,6 +215,17 @@ impl WidgetApi for Server {
         Ok(Widget {
             id: 42,
             name: body.name.clone(),
+        })
+    }
+
+    async fn rename_widget(
+        &self,
+        path: Path<u64>,
+        body: Option<Body<CreateWidget>>,
+    ) -> Result<Widget, WidgetError> {
+        Ok(Widget {
+            id: *path,
+            name: body.map_or("sprocket".into(), |body| body.inner.name),
         })
     }
 
@@ -341,6 +366,13 @@ async fn async_client() -> anyhow::Result<()> {
         .await?;
     assert_eq!(created.id, 42);
     assert_eq!(created.name, "cog");
+
+    // Optional request body, left out and sent.
+    assert_eq!(client.rename_widget(1, None).await?.name, "sprocket");
+    let renamed = client
+        .rename_widget(1, Some(CreateWidget { name: "cog".into() }))
+        .await?;
+    assert_eq!(renamed.name, "cog");
 
     // Multipart request body.
     let uploaded = client
@@ -483,6 +515,11 @@ fn blocking_client() -> anyhow::Result<()> {
     let created = client.create_widget(CreateWidget { name: "cog".into() })?;
     assert_eq!(created.id, 42);
     assert_eq!(created.name, "cog");
+
+    // Optional request body, left out and sent.
+    assert_eq!(client.rename_widget(1, None)?.name, "sprocket");
+    let renamed = client.rename_widget(1, Some(CreateWidget { name: "cog".into() }))?;
+    assert_eq!(renamed.name, "cog");
 
     // Empty response deserializes to the unit type.
     let () = client.delete_widget(1)?;

@@ -173,11 +173,11 @@ fn build_operation(
     }
 
     let request_body = match ep.request_type {
-        Some(generated::RequestType::Json(schema_fn)) => {
-            let schema = resolve_schema(schema_fn, generator)?;
+        Some(generated::RequestType::Json { schema, optional }) => {
+            let schema = resolve_schema(schema, generator)?;
             Some(ObjectOrReference::Object(RequestBody {
                 content: make_json_content(schema),
-                required: Some(true),
+                required: Some(!optional),
                 ..Default::default()
             }))
         }

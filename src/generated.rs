@@ -37,8 +37,8 @@ pub type SchemaFn = fn(&mut SchemaGenerator) -> Schema;
 /// Describes how the request body is parsed.
 #[derive(Debug, Copy, Clone)]
 pub enum RequestType {
-    /// A JSON body with a schema.
-    Json(SchemaFn),
+    /// A JSON body with a schema. An optional body may be empty.
+    Json { schema: SchemaFn, optional: bool },
     /// A `multipart/form-data` body. The schema, if present, comes from the
     /// endpoint's `request_schema_with` function.
     Multipart(Option<SchemaFn>),

@@ -1,0 +1,59 @@
+---
+source: tests/optional_body.rs
+expression: spec
+---
+openapi: 3.1.0
+info:
+  title: WidgetApi
+  version: 0.1.0
+paths:
+  "/widgets/{id}":
+    delete:
+      description: "Delete a widget, optionally saying why."
+      operationId: delete_widget
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+            minimum: 0
+            format: uint64
+      requestBody:
+        content:
+          application/json:
+            schema:
+              properties:
+                reason:
+                  type: string
+              type: object
+              required:
+                - reason
+        required: false
+      responses:
+        "200":
+          description: successful operation
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Deleted"
+        default:
+          description: error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+components:
+  schemas:
+    Deleted:
+      properties:
+        reason:
+          type: string
+      type: object
+    ApiError:
+      properties:
+        message:
+          type: string
+      type: object
+      required:
+        - message
