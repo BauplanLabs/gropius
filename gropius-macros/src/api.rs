@@ -101,14 +101,14 @@ enum ResponseKind {
 
 /// The kind of request body an endpoint accepts.
 enum RequestKind {
-    Json(Box<Type>),
+    Json { ty: Box<Type>, optional: bool },
     Multipart(Option<Box<Type>>),
 }
 
 impl RequestKind {
     fn json_type(&self) -> Option<&Type> {
         match self {
-            RequestKind::Json(ty) => Some(ty),
+            RequestKind::Json { ty, .. } => Some(ty),
             RequestKind::Multipart(_) => None,
         }
     }
@@ -174,10 +174,11 @@ pub(crate) fn expand(attr: TokenStream, mut item_trait: ItemTrait) -> TokenStrea
         let path_schema = schema_fn(ep.path_type.as_ref(), true, span);
         let query_schema = schema_fn(ep.query_type.as_ref(), true, span);
         let request_schema = match &ep.request_type {
-            Some(RequestKind::Json(ty)) => quote_spanned! { span =>
-                Some(::gropius::generated::RequestType::Json(
-                    <#ty as ::gropius::generated::schemars::JsonSchema>::json_schema,
-                ))
+            Some(RequestKind::Json { ty, optional }) => quote_spanned! { span =>
+                Some(::gropius::generated::RequestType::Json {
+                    schema: <#ty as ::gropius::generated::schemars::JsonSchema>::json_schema,
+                    optional: #optional,
+                })
             },
             Some(RequestKind::Multipart(schema_ty)) => {
                 let schema = match schema_ty {
@@ -261,9 +262,15 @@ pub(crate) fn expand(attr: TokenStream, mut item_trait: ItemTrait) -> TokenStrea
         }
 
         match &ep.request_type {
-            Some(RequestKind::Json(ty)) => {
+            Some(RequestKind::Json { ty, optional }) => {
+                let extract = if *optional {
+                    quote! { extract_optional }
+                } else {
+                    quote! { extract }
+                };
+
                 extractions.push(quote_spanned! { span =>
-                    let body = match ::gropius::Body::<#ty>::extract(_req) {
+                    let body = match ::gropius::Body::<#ty>::#extract(_req) {
                         Ok(v) => v,
                         Err(e) => return ::std::boxed::Box::pin(::core::future::ready(Err(e))),
                     };
@@ -515,7 +522,7 @@ fn parse_endpoint(method: &mut TraitItemFn) -> Result<RawEndpoint, Diagnostic> {
             }
 
             query_type = Some(inner);
-        } else if let Some(inner) = parse_extractor(ty, "Body") {
+        } else if let Some((inner, optional)) = parse_body(ty) {
             if raw_request {
                 return Err(out_of_order);
             }
@@ -523,7 +530,10 @@ fn parse_endpoint(method: &mut TraitItemFn) -> Result<RawEndpoint, Diagnostic> {
                 return Err(extractor_span.error("at most one Body or MultipartBody is allowed"));
             }
 
-            request_type = Some(RequestKind::Json(Box::new(inner)));
+            request_type = Some(RequestKind::Json {
+                ty: Box::new(inner),
+                optional,
+            });
         } else if let Type::Path(p) = ty.deref()
             && let Some(last) = p.path.segments.last()
             && last.ident == "MultipartBody"
@@ -633,6 +643,16 @@ fn parse_extractor(ty: &Type, name: &str) -> Option<Type> {
     };
 
     Some(inner.clone())
+}
+
+/// If `ty` is `Body<T>` or `Option<Body<T>>`, return `T` and whether the body
+/// is optional.
+fn parse_body(ty: &Type) -> Option<(Type, bool)> {
+    if let Some(inner) = parse_extractor(ty, "Option") {
+        return parse_extractor(&inner, "Body").map(|inner| (inner, true));
+    }
+
+    parse_extractor(ty, "Body").map(|inner| (inner, false))
 }
 
 /// Extract `(R, E)` from `-> impl Future<Output = Result<R, E>>`.

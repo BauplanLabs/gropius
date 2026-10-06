@@ -138,8 +138,12 @@ fn client_method(ep: &RawEndpoint, vis: &syn::Visibility, is_async: bool) -> Tok
         params.push(quote! { query: #ty });
     }
     match &ep.request_type {
-        Some(RequestKind::Json(ty)) => {
-            params.push(quote! { body: #ty });
+        Some(RequestKind::Json { ty, optional }) => {
+            if *optional {
+                params.push(quote! { body: ::core::option::Option<#ty> });
+            } else {
+                params.push(quote! { body: #ty });
+            }
         }
         Some(RequestKind::Multipart(_)) => {
             params.push(quote! { boundary: &str });
@@ -197,12 +201,26 @@ fn client_method(ep: &RawEndpoint, vis: &syn::Visibility, is_async: bool) -> Tok
     };
 
     let body_expr = match &ep.request_type {
-        Some(RequestKind::Json(_)) => quote! {
-            ::core::option::Option::Some((
-                ::std::string::String::from("application/json"),
-                ::gropius::generated::client::encode_body(&body)?,
-            ))
-        },
+        Some(RequestKind::Json { optional, .. }) => {
+            if *optional {
+                quote! {
+                    match &body {
+                        ::core::option::Option::Some(body) => ::core::option::Option::Some((
+                            ::std::string::String::from("application/json"),
+                            ::gropius::generated::client::encode_body(body)?,
+                        )),
+                        ::core::option::Option::None => ::core::option::Option::None,
+                    }
+                }
+            } else {
+                quote! {
+                    ::core::option::Option::Some((
+                        ::std::string::String::from("application/json"),
+                        ::gropius::generated::client::encode_body(&body)?,
+                    ))
+                }
+            }
+        }
         Some(RequestKind::Multipart(_)) => quote! {
             ::core::option::Option::Some(::gropius::generated::client::encode_multipart(
                 boundary, parts,

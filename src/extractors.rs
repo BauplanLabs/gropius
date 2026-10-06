@@ -211,6 +211,32 @@ impl<T: DeserializeOwned + JsonSchema + fmt::Display> fmt::Display for Query<T> 
 ///     ) -> Result<(), MyError>;
 /// }
 /// ```
+///
+/// If you want to mark the body as optional, use `Option<Body>`. For example,
+/// this handler accepts either a full body or no body at all:
+///
+/// ```
+/// # use schemars::JsonSchema;
+/// # use serde::{Deserialize, Serialize};
+/// # #[derive(Serialize, JsonSchema)] struct MyError;
+/// # impl gropius::ApiError for MyError {
+/// #     fn status_code(&self) -> http::StatusCode { http::StatusCode::INTERNAL_SERVER_ERROR }
+/// # }
+/// #[derive(Deserialize, JsonSchema)]
+/// struct DeleteWidget {
+///     reason: String,
+/// }
+///
+/// #[gropius::api]
+/// trait WidgetApi {
+///     #[endpoint(DELETE, "/widgets/{id}")]
+///     async fn delete_widget(
+///         &self,
+///         path: gropius::Path<u64>,
+///         body: Option<gropius::Body<DeleteWidget>>,
+///     ) -> Result<(), MyError>;
+/// }
+/// ```
 pub struct Body<T: DeserializeOwned + JsonSchema> {
     /// The deserialized body.
     pub inner: T,
@@ -230,6 +256,15 @@ impl<T: DeserializeOwned + JsonSchema> Body<T> {
                 })
             }
         }
+    }
+
+    #[doc(hidden)]
+    pub fn extract_optional(req: &Request) -> Result<Option<Self>, RouterError> {
+        if req.body().is_empty() {
+            return Ok(None);
+        }
+
+        Self::extract(req).map(Some)
     }
 }
 
