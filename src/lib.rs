@@ -369,7 +369,10 @@
 //! ## Generating a client
 //!
 //! With the `client-reqwest` or `client-ureq` feature enabled, the `client`
-//! argument generates a client struct named `FooApiClient` next to the trait:
+//! argument generates a blocking client named `FooApiBlockingClient` next to
+//! the trait. It is backed by `reqwest::blocking` or `ureq`, depending on the
+//! feature. `client(async)` generates an async client named `FooApiClient`,
+//! backed by `reqwest`, so it needs the `client-reqwest` feature:
 //!
 //! ```no_run
 //! # use gropius::{ApiError, Path};
@@ -408,8 +411,8 @@
 //! # fn main() {}
 //! ```
 //!
-//! Dropping `async` generates a blocking client instead, backed by
-//! `reqwest::blocking` or `ureq`, depending on which feature is enabled.
+//! A trait can generate both clients, with one `client` argument each, like
+//! `#[gropius::api(client, client(async))]`.
 //!
 //! A `cfg(...)` argument gates the generated client behind a `#[cfg(...)]`.
 //! For example, to make a test-only client for integration tests:

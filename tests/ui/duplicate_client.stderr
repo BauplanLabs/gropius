@@ -1,0 +1,5 @@
+error: duplicate async client
+  --> tests/ui/duplicate_client.rs:11:31
+   |
+11 | #[gropius::api(client(async), client(async, cfg(test)))]
+   |                               ^^^^^^

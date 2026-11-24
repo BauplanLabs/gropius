@@ -38,6 +38,13 @@ impl syn::parse::Parse for ClientAttr {
     }
 }
 
+impl ClientAttr {
+    /// The kind of client, `async` or `blocking`.
+    pub(super) fn kind(&self) -> &'static str {
+        if self.is_async { "async" } else { "blocking" }
+    }
+}
+
 pub(super) fn generate_client(
     client: &ClientAttr,
     vis: &syn::Visibility,
@@ -45,19 +52,43 @@ pub(super) fn generate_client(
     trait_name: &str,
     endpoints: &[RawEndpoint],
 ) -> TokenStream {
-    let client_ident = format_ident!("{}Client", trait_ident);
     let is_async = client.is_async;
-
-    let inner_ty = if is_async {
-        quote! { ::gropius::generated::client::AsyncClient }
+    let (client_ident, inner_ty, transport_ty, transport_doc) = if is_async {
+        (
+            format_ident!("{}Client", trait_ident),
+            quote! { ::gropius::generated::client::AsyncClient },
+            quote! { ::gropius::generated::client::AsyncTransport },
+            quote! {
+                /// Create a client for the given base URL from an existing
+                /// `reqwest::Client`.
+            },
+        )
     } else {
-        quote! { ::gropius::generated::client::BlockingClient }
-    };
-
-    let transport_ty = if is_async {
-        quote! { ::gropius::generated::client::AsyncTransport }
-    } else {
-        quote! { ::gropius::generated::client::BlockingTransport }
+        (
+            format_ident!("{}BlockingClient", trait_ident),
+            quote! { ::gropius::generated::client::BlockingClient },
+            quote! { ::gropius::generated::client::BlockingTransport },
+            quote! {
+                /// Create a client for the given base URL from an existing transport.
+                ///
+                /// # `reqwest`
+                ///
+                /// This method accepts a `reqwest::blocking::Client`.
+                ///
+                /// # `ureq`
+                ///
+                /// This method accepts a `ureq::Agent`. Note that the agent *must*
+                /// have `http_status_as_error(false)` set in its config, or all
+                /// errors will be [`TransportError`](::gropius::client::TransportError):
+                ///
+                /// ```ignore
+                ///  let transport: ureq::Agent = ureq::Agent::config_builder()
+                ///    .http_status_as_error(false)
+                ///    .build()
+                ///    .into();
+                /// ```
+            },
+        )
     };
 
     let cfg_attr = match &client.cfg {
@@ -90,25 +121,7 @@ pub(super) fn generate_client(
                 Self { inner: <#inner_ty>::new(base_url) }
             }
 
-            /// Create a client for the given base URL from an existing transport.
-            ///
-            /// # `reqwest`
-            ///
-            /// This method accepts a `reqwest::Client` (for async) or a
-            /// `reqwest::blocking::Client` (for sync).
-            ///
-            /// # `ureq`
-            ///
-            /// This method accepts a `ureq::Agent`. Note that the agent *must*
-            /// have `http_status_as_error(false)` set in its config, or all
-            /// errors will be [`TransportError`](crate::client::ClientError):
-            ///
-            /// ```ignore
-            ///  let transport: ureq::Agent = ureq::Agent::config_builder()
-            ///    .http_status_as_error(false)
-            ///    .build()
-            ///    .into();
-            /// ```
+            #transport_doc
             #vis fn with_transport(
                 base_url: impl ::core::convert::Into<::std::string::String>,
                 transport: #transport_ty,
