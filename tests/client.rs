@@ -54,9 +54,8 @@ struct UploadSpec {
     name: String,
 }
 
-// The API under test. Its handlers back both clients, and it generates the
-// async client.
-#[gropius::api(client(async, cfg(feature = "client-reqwest")))]
+// The API under test.
+#[gropius::api(client, client(async, cfg(feature = "client-reqwest")))]
 trait WidgetApi {
     #[endpoint(GET, "/widgets/{id}")]
     async fn get_widget(&self, path: Path<u64>) -> Result<Widget, WidgetError>;
@@ -65,54 +64,6 @@ trait WidgetApi {
     async fn catalog(&self, path: Path<(String, u64)>) -> Result<Widget, WidgetError>;
 
     // A parameter named after a Rust keyword becomes a raw identifier.
-    #[endpoint(GET, "/kinds/{type}")]
-    async fn by_kind(&self, path: Path<String>) -> Result<Widget, WidgetError>;
-
-    #[endpoint(GET, "/shelf/{aisle}/{slot}")]
-    async fn shelf(&self, path: Path<Shelf>) -> Result<Widget, WidgetError>;
-
-    #[endpoint(GET, "/widgets")]
-    async fn list_widgets(&self, query: Query<ListQuery>) -> Result<Vec<Widget>, WidgetError>;
-
-    #[endpoint(GET, "/echo")]
-    async fn echo(&self, query: Query<Echo>) -> Result<Echo, WidgetError>;
-
-    #[endpoint(POST, "/widgets")]
-    async fn create_widget(&self, body: Body<CreateWidget>) -> Result<Widget, WidgetError>;
-
-    #[endpoint(PATCH, "/widgets/{id}")]
-    async fn rename_widget(
-        &self,
-        path: Path<u64>,
-        body: Option<Body<CreateWidget>>,
-    ) -> Result<Widget, WidgetError>;
-
-    #[endpoint(POST, "/uploads")]
-    async fn upload(&self, body: MultipartBody) -> Result<Widget, WidgetError>;
-
-    #[endpoint(DELETE, "/widgets/{id}")]
-    async fn delete_widget(&self, path: Path<u64>) -> Result<EmptyResponse, WidgetError>;
-
-    #[endpoint(GET, "/image", content_type = "image/png")]
-    async fn image(&self) -> Result<Response, WidgetError>;
-
-    #[endpoint(GET, "/health")]
-    async fn health(&self) -> Result<Widget, Infallible>;
-}
-
-// The macro emits one client per trait, so exercising the blocking client needs
-// a second trait. It mirrors `WidgetApi`'s routes and is served by the same
-// handlers, so both clients are tested against identical behavior. The trait
-// itself is only a vehicle for the generated client, hence `dead_code`.
-#[gropius::api(client)]
-#[allow(dead_code)]
-trait BlockingWidgetApi {
-    #[endpoint(GET, "/widgets/{id}")]
-    async fn get_widget(&self, path: Path<u64>) -> Result<Widget, WidgetError>;
-
-    #[endpoint(GET, "/catalog/{kind}/{id}")]
-    async fn catalog(&self, path: Path<(String, u64)>) -> Result<Widget, WidgetError>;
-
     #[endpoint(GET, "/kinds/{type}")]
     async fn by_kind(&self, path: Path<String>) -> Result<Widget, WidgetError>;
 
@@ -457,7 +408,7 @@ fn multipart_encoding() {
 
 #[test]
 fn blocking_client() -> anyhow::Result<()> {
-    let client = BlockingWidgetApiClient::new(server_url());
+    let client = WidgetApiBlockingClient::new(server_url());
 
     // Multipart request body.
     let uploaded = client.upload(
